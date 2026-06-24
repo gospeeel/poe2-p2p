@@ -21,7 +21,23 @@ Windows-only checks still need a Windows PC:
 
 ## Windows Quick Start
 
-After copying the project folder to a Windows PC:
+For normal users, do not download `Source code.zip`.
+
+Download the ready installer from GitHub Releases:
+
+```text
+POE2-P2P-Setup.exe
+```
+
+Then:
+
+```text
+Run POE2-P2P-Setup.exe
+Install
+Launch POE2 P2P from Start Menu or Desktop shortcut
+```
+
+Developer/manual setup after copying the project folder to a Windows PC:
 
 1. Install Tesseract OCR.
    Recommended installer: `https://github.com/UB-Mannheim/tesseract/wiki`
@@ -58,7 +74,34 @@ dist\POE2-P2P\POE2-P2P.exe
 
 ## Build Windows Installer
 
-For a user-friendly install flow, build an installer on Windows:
+For a user-friendly install flow, build an installer on Windows or let GitHub Actions build it.
+
+### Option A: GitHub Releases
+
+Push a version tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GitHub Actions will build:
+
+```text
+POE2-P2P-Setup.exe
+```
+
+and attach it to the GitHub Release for that tag.
+
+You can also run the workflow manually from:
+
+```text
+GitHub -> Actions -> Build Windows Installer -> Run workflow
+```
+
+In that case the installer is available as a workflow artifact.
+
+### Option B: Local Windows Build
 
 1. Install Inno Setup 6:
 
