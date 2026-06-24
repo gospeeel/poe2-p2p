@@ -56,6 +56,44 @@ Expected output:
 dist\POE2-P2P\POE2-P2P.exe
 ```
 
+## Build Windows Installer
+
+For a user-friendly install flow, build an installer on Windows:
+
+1. Install Inno Setup 6:
+
+```text
+https://jrsoftware.org/isinfo.php
+```
+
+2. Install Tesseract OCR on the build machine if you want OCR bundled into the installer:
+
+```text
+https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+3. Run:
+
+```text
+build_installer.bat
+```
+
+Expected output:
+
+```text
+installer_output\POE2-P2P-Setup.exe
+```
+
+End-user flow:
+
+```text
+Download POE2-P2P-Setup.exe
+Run installer
+Launch POE2 P2P from Start Menu or Desktop shortcut
+```
+
+If Tesseract exists at `C:\Program Files\Tesseract-OCR` during installer build, it is copied into the app folder and OCR works without a separate user install.
+
 If Tesseract is installed in the default location, the launchers set it automatically:
 
 ```text

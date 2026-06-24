@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import sys
 
 from .parser import parse_ratio
 
@@ -76,6 +77,12 @@ def _configure_tesseract_cmd(pytesseract_module) -> None:
         pytesseract_module.pytesseract.tesseract_cmd = configured
         return
 
-    common_windows_path = Path("C:/Program Files/Tesseract-OCR/tesseract.exe")
-    if common_windows_path.exists():
-        pytesseract_module.pytesseract.tesseract_cmd = str(common_windows_path)
+    candidates = [
+        Path(sys.executable).resolve().parent / "tesseract" / "tesseract.exe",
+        Path.cwd() / "tesseract" / "tesseract.exe",
+        Path("C:/Program Files/Tesseract-OCR/tesseract.exe"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            pytesseract_module.pytesseract.tesseract_cmd = str(candidate)
+            return
