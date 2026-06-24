@@ -42,7 +42,14 @@ from ..config import DEFAULT_MARKET_RATIO_REGION, CropRegion
 from ..icon_cache import IconCache
 from ..logging_utils import LOG_DIR, LOG_FILE
 from ..global_hotkeys import GlobalHotkeyManager
-from ..models import CHAIN_TYPE_LABELS, ChainType, Opportunity
+from ..models import (
+    CHAIN_TYPE_LABELS,
+    STRATEGY_TYPE_DESCRIPTIONS,
+    STRATEGY_TYPE_LABELS,
+    ChainType,
+    Opportunity,
+    StrategyType,
+)
 from ..ocr import detect_tesseract_cmd
 from ..presets import STRATEGY_PRESETS
 from ..settings import ACTION_LABELS, AppSettings, find_hotkey_conflicts, load_settings, save_settings
@@ -71,6 +78,11 @@ CHAIN_FILTERS = {
     "Треугольная": ChainType.TRIANGULAR,
     "Через Chaos": ChainType.CROSS_CURRENCY,
     "Многошаговая": ChainType.MULTI_HOP,
+}
+
+STRATEGY_FILTERS = {
+    "Любая стратегия": None,
+    **{STRATEGY_TYPE_LABELS[strategy]: strategy for strategy in StrategyType},
 }
 
 ICON_COLORS = {
@@ -516,6 +528,14 @@ class OverlayWindow(QMainWindow):
             "Тип экономической связки. Например, треугольная цепочка использует две разные сделки между базовой валютой и hub-валютой.",
         )
 
+        self.strategy_filter = QComboBox()
+        self.strategy_filter.addItems(list(STRATEGY_FILTERS))
+        self.strategy_filter.currentIndexChanged.connect(self.apply_filters)
+        self._delayed_tip(
+            self.strategy_filter,
+            "Экономический смысл связки: спред, ликвидность, валютный треугольник, корзина или другой режим исполнения.",
+        )
+
         self.min_roi_filter = QDoubleSpinBox()
         self.min_roi_filter.setRange(0, 999)
         self.min_roi_filter.setDecimals(1)
@@ -579,6 +599,7 @@ class OverlayWindow(QMainWindow):
         for label, widget in [
             ("База", self.base_filter),
             ("Тип", self.chain_filter),
+            ("Стратегия", self.strategy_filter),
             ("Мин.", self.min_roi_filter),
             ("Профит", self.min_profit_filter),
             ("Профит/ч", self.min_profit_hour_filter),
@@ -620,12 +641,13 @@ class OverlayWindow(QMainWindow):
         opportunities_layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(14)
+        self.table.setColumnCount(15)
         self.table.setHorizontalHeaderLabels(
             [
                 "Иконки",
                 "Маршрут",
                 "Тип",
+                "Стратегия",
                 "Вход",
                 "Выход",
                 "Профит",
@@ -642,6 +664,7 @@ class OverlayWindow(QMainWindow):
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
@@ -809,6 +832,7 @@ class OverlayWindow(QMainWindow):
         visible = []
         base = self.base_filter.currentText() if hasattr(self, "base_filter") else "Любая база"
         chain_type = CHAIN_FILTERS.get(self.chain_filter.currentText()) if hasattr(self, "chain_filter") else None
+        strategy_type = STRATEGY_FILTERS.get(self.strategy_filter.currentText()) if hasattr(self, "strategy_filter") else None
         min_roi = self.min_roi_filter.value() if hasattr(self, "min_roi_filter") else 0
         min_confidence = self.min_confidence_filter.value() if hasattr(self, "min_confidence_filter") else 0
         min_profit = self.min_profit_filter.value() if hasattr(self, "min_profit_filter") else 0
@@ -819,6 +843,8 @@ class OverlayWindow(QMainWindow):
             if base != "Любая база" and not opportunity.path_label.startswith(base):
                 continue
             if chain_type is not None and opportunity.chain_type != chain_type:
+                continue
+            if strategy_type is not None and strategy_type not in opportunity.strategy_types:
                 continue
             if opportunity.roi_percent < min_roi:
                 continue
@@ -847,6 +873,7 @@ class OverlayWindow(QMainWindow):
                 self._path_icons(opportunity),
                 self._path_label(opportunity),
                 CHAIN_TYPE_LABELS.get(opportunity.chain_type, "неизвестно"),
+                opportunity.strategy_label,
                 f"{opportunity.input_amount:.2f} {self._alias(opportunity.input_currency)}",
                 f"{opportunity.output_amount:.2f} {self._alias(opportunity.input_currency)}",
                 f"{opportunity.net_profit:.2f}",
@@ -864,9 +891,9 @@ class OverlayWindow(QMainWindow):
                 item.setData(Qt.ItemDataRole.UserRole, self._opportunity_tooltip(opportunity))
                 if column == 0:
                     item.setIcon(self._icon_for_currency(opportunity.path[0]))
-                if column in {5, 6} and opportunity.net_profit > 0:
+                if column in {6, 7} and opportunity.net_profit > 0:
                     item.setForeground(QColor("#4bd16f"))
-                if column == 13 and opportunity.risk == "high":
+                if column == 14 and opportunity.risk == "high":
                     item.setForeground(QColor("#ff6b6b"))
                 self.table.setItem(row, column, item)
             self.table.setRowHeight(row, 24 if self.compact_mode else 34)
@@ -1057,9 +1084,14 @@ class OverlayWindow(QMainWindow):
 
     def _opportunity_tooltip(self, opportunity: Opportunity) -> str:
         risk_reasons = "; ".join(opportunity.risk_reasons) if opportunity.risk_reasons else "нет данных"
+        strategy_descriptions = "; ".join(
+            STRATEGY_TYPE_DESCRIPTIONS.get(strategy, strategy.value)
+            for strategy in opportunity.strategy_types
+        )
         return (
             f"Связка: {self._path_label(opportunity)}\n"
             f"Тип: {CHAIN_TYPE_LABELS.get(opportunity.chain_type, 'неизвестно')}\n"
+            f"Стратегия: {opportunity.strategy_label}\n"
             f"Вход: {opportunity.input_amount:.2f} {self._alias(opportunity.input_currency)}\n"
             f"Выход: {opportunity.output_amount:.2f} {self._alias(opportunity.input_currency)}\n"
             f"Чистый профит: {opportunity.net_profit:.2f}\n"
@@ -1069,6 +1101,7 @@ class OverlayWindow(QMainWindow):
             f"Оценка объема: {opportunity.volume_score:.0f}\n"
             f"Максимальный размер: {'нет данных' if opportunity.max_size is None else f'{opportunity.max_size:.0f}'}\n"
             f"Шагов исполнения: {opportunity.execution_steps}\n"
+            f"Смысл стратегии: {strategy_descriptions}\n"
             f"Причины риска: {risk_reasons}\n"
             f"Источник курсов: {opportunity.source}\n\n"
             "Доходность показывает прибыль одного полного цикла в процентах. "
@@ -1098,6 +1131,7 @@ class OverlayWindow(QMainWindow):
         lines = [
             f"Связка: {self._path_label(opportunity)}",
             f"Тип: {CHAIN_TYPE_LABELS.get(opportunity.chain_type, 'неизвестно')}",
+            f"Стратегия: {opportunity.strategy_label}",
             "",
             "Шаги:",
         ]
@@ -1121,6 +1155,16 @@ class OverlayWindow(QMainWindow):
                 f"Чистый профит: {opportunity.net_profit:.4f}",
                 f"Доходность: {opportunity.roi_percent:.2f}%",
                 f"Профит/ч: {opportunity.profit_per_hour:.4f}",
+                "",
+                "Экономический смысл:",
+            ]
+        )
+        for strategy in opportunity.strategy_types:
+            description = STRATEGY_TYPE_DESCRIPTIONS.get(strategy, strategy.value)
+            label = STRATEGY_TYPE_LABELS.get(strategy, strategy.value)
+            lines.append(f"- {label}: {description}")
+        lines.extend(
+            [
                 "",
                 "Причины риска:",
             ]

@@ -1,4 +1,5 @@
 import unittest
+from dataclasses import replace
 from unittest.mock import Mock, patch
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -12,7 +13,8 @@ from poe2_p2p.config import CropRegion
 from poe2_p2p.dashboard import export_history_dashboard
 from poe2_p2p.exporter import export_opportunities_csv
 from poe2_p2p.icon_cache import IconCache
-from poe2_p2p.models import ChainType, RateEdge
+from poe2_p2p.economic_strategies import classify_strategies
+from poe2_p2p.models import ChainType, RateEdge, StrategyType
 from poe2_p2p.parser import normalize_ratio_to_edges, parse_ratio
 from poe2_p2p.presets import DEFAULT_PRESETS, STRATEGY_PRESETS
 from poe2_p2p.ranking import rank_opportunities
@@ -54,6 +56,7 @@ class CalculatorTest(unittest.TestCase):
         self.assertAlmostEqual(opportunity.net_profit, 181.68)
         self.assertAlmostEqual(opportunity.roi_percent, 8.862439, places=5)
         self.assertEqual(opportunity.chain_type, ChainType.DIRECT)
+        self.assertIn(StrategyType.BASKET, opportunity.strategy_types)
         self.assertEqual(len(opportunity.steps), 3)
         self.assertEqual(opportunity.steps[0].from_currency, EXALTED)
         self.assertEqual(opportunity.steps[-1].to_currency, EXALTED)
@@ -115,6 +118,69 @@ class CalculatorTest(unittest.TestCase):
             ),
             ChainType.MULTI_HOP,
         )
+
+    def test_economic_strategy_classification(self):
+        def first_cycle(rates, start="Exalted Orb", amount=100, max_hops=5):
+            return ArbitrageCalculator(rates, cycles_per_hour=10).find_cycles(start, amount, max_hops=max_hops)[0]
+
+        spread = first_cycle(
+            [
+                RateEdge("Exalted Orb", "Chaos Orb", 10.0, "test", observed_stock=1000),
+                RateEdge("Chaos Orb", "Exalted Orb", 0.12, "test", observed_stock=1000),
+            ],
+            max_hops=2,
+        )
+        self.assertIn(StrategyType.SPREAD_CAPTURE, spread.strategy_types)
+
+        stable_hub = first_cycle(
+            [
+                RateEdge("Exalted Orb", "Chaos Orb", 2.0, "test", observed_stock=1000),
+                RateEdge("Chaos Orb", "Rune A", 2.0, "test", observed_stock=1000),
+                RateEdge("Rune A", "Exalted Orb", 0.4, "test", observed_stock=1000),
+            ],
+            max_hops=3,
+        )
+        self.assertIn(StrategyType.STABLE_HUB, stable_hub.strategy_types)
+        self.assertIn(StrategyType.BASKET, stable_hub.strategy_types)
+
+        divine_hub = first_cycle(
+            [
+                RateEdge("Divine Orb", "Chaos Orb", 2.0, "test", observed_stock=1000),
+                RateEdge("Chaos Orb", "Essence A", 2.0, "test", observed_stock=1000),
+                RateEdge("Essence A", "Divine Orb", 0.4, "test", observed_stock=1000),
+            ],
+            start="Divine Orb",
+            max_hops=3,
+        )
+        self.assertIn(StrategyType.DIVINE_HUB, divine_hub.strategy_types)
+
+        triangle = first_cycle(
+            [
+                RateEdge("Exalted Orb", "Chaos Orb", 2.0, "test", observed_stock=20_000),
+                RateEdge("Chaos Orb", "Divine Orb", 2.0, "test", observed_stock=20_000),
+                RateEdge("Divine Orb", "Exalted Orb", 0.4, "test", observed_stock=20_000),
+            ],
+            max_hops=3,
+        )
+        self.assertIn(StrategyType.CURRENCY_TRIANGLE, triangle.strategy_types)
+        self.assertIn(StrategyType.LIQUIDITY_FIRST, triangle.strategy_types)
+
+        family = first_cycle(
+            [
+                RateEdge("Exalted Orb", "Rune A", 2.0, "test", observed_stock=100),
+                RateEdge("Rune A", "Rune B", 2.0, "test", observed_stock=100),
+                RateEdge("Rune B", "Exalted Orb", 0.4, "test", observed_stock=100),
+            ],
+            max_hops=3,
+        )
+        self.assertIn(StrategyType.SAME_FAMILY, family.strategy_types)
+        self.assertIn(StrategyType.LOW_CAP_HIGH_ROI, family.strategy_types)
+
+        trend = replace(triangle, trend_percent=5.0, volume_score=20_000)
+        self.assertIn(StrategyType.TREND_CONFIRMED, classify_strategies(trend))
+
+        mean_reversion = replace(triangle, baseline_delta_percent=-15.0)
+        self.assertIn(StrategyType.MEAN_REVERSION, classify_strategies(mean_reversion))
 
 
 class UtilityTest(unittest.TestCase):

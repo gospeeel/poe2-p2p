@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import replace
 from datetime import UTC, datetime
 from math import prod
 
+from .economic_strategies import classify_strategies
 from .models import ChainType, Opportunity, OpportunityStep, RateEdge
 
 
@@ -123,6 +125,7 @@ class ArbitrageCalculator:
         source = ", ".join(edge.source for edge in edges)
         stocks = [edge.observed_stock for edge in edges if edge.observed_stock is not None]
         max_size = min(stocks) if stocks else None
+        volume_score = sum(stocks) if stocks else 0.0
         age_seconds = max(
             (datetime.now(UTC) - edge.timestamp).total_seconds()
             for edge in edges
@@ -138,7 +141,7 @@ class ArbitrageCalculator:
             fixed_loss=fixed_loss,
         )
 
-        return Opportunity(
+        opportunity = Opportunity(
             path=path,
             input_currency=input_currency,
             input_amount=input_amount,
@@ -154,11 +157,12 @@ class ArbitrageCalculator:
             chain_type=self._classify_chain(path),
             max_size=max_size,
             age_seconds=age_seconds,
-            volume_score=0.0,
+            volume_score=volume_score,
             execution_steps=len(edges),
             steps=steps,
             risk_reasons=risk_reasons,
         )
+        return replace(opportunity, strategy_types=classify_strategies(opportunity))
 
     @staticmethod
     def _build_steps(input_amount: float, edges: tuple[RateEdge, ...]) -> tuple[OpportunityStep, ...]:

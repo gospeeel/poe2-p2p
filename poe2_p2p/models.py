@@ -24,6 +24,56 @@ CHAIN_TYPE_LABELS = {
 }
 
 
+class StrategyType(StrEnum):
+    SPREAD_CAPTURE = "spread_capture"
+    STABLE_HUB = "stable_hub"
+    DIVINE_HUB = "divine_hub"
+    BASKET = "basket"
+    TREND_CONFIRMED = "trend_confirmed"
+    MEAN_REVERSION = "mean_reversion"
+    LIQUIDITY_FIRST = "liquidity_first"
+    LOW_CAP_HIGH_ROI = "low_cap_high_roi"
+    SAME_FAMILY = "same_family"
+    CURRENCY_TRIANGLE = "currency_triangle"
+    FOUR_HOP_HUB = "four_hop_hub"
+    FIVE_HOP_RESEARCH = "five_hop_research"
+    GENERIC = "generic"
+
+
+STRATEGY_TYPE_LABELS = {
+    StrategyType.SPREAD_CAPTURE: "спред",
+    StrategyType.STABLE_HUB: "стабильный hub",
+    StrategyType.DIVINE_HUB: "Divine hub",
+    StrategyType.BASKET: "корзина",
+    StrategyType.TREND_CONFIRMED: "тренд",
+    StrategyType.MEAN_REVERSION: "возврат к среднему",
+    StrategyType.LIQUIDITY_FIRST: "ликвидность",
+    StrategyType.LOW_CAP_HIGH_ROI: "высокий ROI",
+    StrategyType.SAME_FAMILY: "одна семья",
+    StrategyType.CURRENCY_TRIANGLE: "валютный треугольник",
+    StrategyType.FOUR_HOP_HUB: "4 шага через hub",
+    StrategyType.FIVE_HOP_RESEARCH: "5 шагов research",
+    StrategyType.GENERIC: "общая",
+}
+
+
+STRATEGY_TYPE_DESCRIPTIONS = {
+    StrategyType.SPREAD_CAPTURE: "Положительный цикл между двумя валютами за счет bid/ask разницы.",
+    StrategyType.STABLE_HUB: "Маршрут через Exalted/Chaos как стабильный hub для исполнения.",
+    StrategyType.DIVINE_HUB: "Маршрут через Divine/Chaos как дорогой hub для крупных циклов.",
+    StrategyType.BASKET: "Корзина похожих Omen/Rune/Essence предметов против одной базовой валюты.",
+    StrategyType.TREND_CONFIRMED: "Профит подтвержден положительным трендом и объемом.",
+    StrategyType.MEAN_REVERSION: "NPC/live цена заметно ниже базовой цены, ожидается возврат к среднему.",
+    StrategyType.LIQUIDITY_FIRST: "Приоритет не максимальному ROI, а исполнимому profit/hour при большом объеме.",
+    StrategyType.LOW_CAP_HIGH_ROI: "Рискованный малый объем с высоким ROI.",
+    StrategyType.SAME_FAMILY: "Обмен внутри одной семьи предметов через hub-валюту.",
+    StrategyType.CURRENCY_TRIANGLE: "Треугольник Exalted/Chaos/Divine без предметной ноги.",
+    StrategyType.FOUR_HOP_HUB: "Четырехшаговый маршрут через предметы и hub-валюту.",
+    StrategyType.FIVE_HOP_RESEARCH: "Пятишаговый исследовательский маршрут с повышенным риском исполнения.",
+    StrategyType.GENERIC: "Связка не попала в более точную стратегическую категорию.",
+}
+
+
 @dataclass(frozen=True)
 class RateEdge:
     from_currency: str
@@ -72,10 +122,17 @@ class Opportunity:
     execution_steps: int = 0
     steps: tuple[OpportunityStep, ...] = ()
     risk_reasons: tuple[str, ...] = ()
+    strategy_types: tuple[StrategyType, ...] = (StrategyType.GENERIC,)
+    trend_percent: float = 0.0
+    baseline_delta_percent: float = 0.0
 
     @property
     def path_label(self) -> str:
         return " -> ".join(self.path)
+
+    @property
+    def strategy_label(self) -> str:
+        return ", ".join(STRATEGY_TYPE_LABELS.get(item, item.value) for item in self.strategy_types)
 
 
 @dataclass(frozen=True)

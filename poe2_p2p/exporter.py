@@ -13,6 +13,7 @@ def export_opportunities_csv(opportunities: list[Opportunity], path: str | Path)
             [
                 "path",
                 "chain_type",
+                "strategy_types",
                 "input_currency",
                 "input_amount",
                 "output_amount",
@@ -35,6 +36,7 @@ def export_opportunities_csv(opportunities: list[Opportunity], path: str | Path)
                 [
                     opportunity.path_label,
                     opportunity.chain_type.value,
+                    "|".join(item.value for item in opportunity.strategy_types),
                     opportunity.input_currency,
                     f"{opportunity.input_amount:.8f}",
                     f"{opportunity.output_amount:.8f}",

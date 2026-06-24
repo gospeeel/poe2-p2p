@@ -45,6 +45,7 @@ class SQLiteStore:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     path TEXT NOT NULL,
                     chain_type TEXT DEFAULT 'unknown' NOT NULL,
+                    strategy_types TEXT DEFAULT 'generic' NOT NULL,
                     input_currency TEXT NOT NULL,
                     input_amount REAL NOT NULL,
                     output_amount REAL NOT NULL,
@@ -77,6 +78,7 @@ class SQLiteStore:
             "score": "ALTER TABLE opportunities ADD COLUMN score REAL DEFAULT 0 NOT NULL",
             "risk": "ALTER TABLE opportunities ADD COLUMN risk TEXT DEFAULT 'unknown' NOT NULL",
             "chain_type": "ALTER TABLE opportunities ADD COLUMN chain_type TEXT DEFAULT 'unknown' NOT NULL",
+            "strategy_types": "ALTER TABLE opportunities ADD COLUMN strategy_types TEXT DEFAULT 'generic' NOT NULL",
             "max_size": "ALTER TABLE opportunities ADD COLUMN max_size REAL",
             "age_seconds": "ALTER TABLE opportunities ADD COLUMN age_seconds REAL DEFAULT 0 NOT NULL",
             "volume_score": "ALTER TABLE opportunities ADD COLUMN volume_score REAL DEFAULT 0 NOT NULL",
@@ -121,6 +123,7 @@ class SQLiteStore:
                 INSERT INTO opportunities (
                     path,
                     chain_type,
+                    strategy_types,
                     input_currency,
                     input_amount,
                     output_amount,
@@ -136,12 +139,13 @@ class SQLiteStore:
                     volume_score,
                     execution_steps,
                     source
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
                         opportunity.path_label,
                         opportunity.chain_type.value,
+                        "|".join(item.value for item in opportunity.strategy_types),
                         opportunity.input_currency,
                         opportunity.input_amount,
                         opportunity.output_amount,
@@ -170,6 +174,7 @@ class SQLiteStore:
                 SELECT
                     path,
                     chain_type,
+                    strategy_types,
                     input_currency,
                     input_amount,
                     output_amount,

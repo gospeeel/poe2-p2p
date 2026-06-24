@@ -91,8 +91,8 @@ dist/POE2-P2P/POE2-P2P.exe
 
 1. Сначала довести Python MVP до полезного состояния.
 2. Добавить `pyinstaller.spec`. `[x]`
-3. Собрать portable `.exe`. `[ ]` Требует Windows-среды сборки.
-4. Проверить запуск на чистой Windows-машине. `[ ]` Требует Windows runtime.
+3. Собрать portable `.exe`. `[x]` Базовый PyInstaller `.exe` был собран и запущен на Windows.
+4. Проверить запуск на чистой Windows-машине. `[ ]` Требует отдельной проверки установленного GitHub Release installer на основном ПК.
 5. После стабилизации OCR/экономики решить, оставаться на Python или переносить shell в C#/Tauri.
 
 ## Функциональные приоритеты
@@ -101,7 +101,7 @@ dist/POE2-P2P/POE2-P2P.exe
 
 - [x] Ручной/полуавтоматический scan текущей пары через CLI capture/crop scaffold.
 - [x] Парсинг текстового `Market Ratio`.
-- [ ] OCR `Market Ratio` из изображения/crop. Код есть, runtime требует установленный Tesseract OCR.
+- [x] OCR `Market Ratio` из изображения/crop. Проверено на сохраненных screenshots после установки Tesseract.
 - [x] Ручная calibration область окна NPC Currency Exchange через JSON save/load.
 - [x] Directed graph rates.
 - [x] Direct arbitrage: `Exalted -> Item -> Divine -> Exalted`.
@@ -109,10 +109,10 @@ dist/POE2-P2P/POE2-P2P.exe
 - [x] CLI fallback.
 - [x] Overlay table code.
 - [x] Overlay runtime verification с установленным PySide6 в Linux/offscreen режиме.
-- [ ] Overlay runtime verification на Windows.
+- [x] Overlay runtime verification на Windows: базовый запуск `.exe` и окно подтверждены.
 - [x] PyInstaller spec и PowerShell build script.
 - [x] PyInstaller spec smoke-test на Linux.
-- [ ] Portable `.exe` build для тестирования без IDE.
+- [x] Portable `.exe` build для тестирования без IDE.
 
 ### P1
 
@@ -172,6 +172,7 @@ dist/POE2-P2P/POE2-P2P.exe
 
 - [x] Фильтр по base currency: Exalted, Divine, Chaos.
 - [x] Фильтр по chain type: direct, reverse, triangular, cross-currency, multi-hop.
+- [x] Фильтр по economic strategy: spread, hub, basket, liquidity, high ROI, currency triangle.
 - [x] Фильтр `min ROI`.
 - [x] Фильтр `min net profit`.
 - [x] Фильтр `min profit/hour`.
@@ -191,6 +192,20 @@ dist/POE2-P2P/POE2-P2P.exe
 - [x] Проверка конфликтов hotkeys.
 - [x] Сохранение hotkeys в config.
 - [x] Visual feedback после hotkey: scan started, scan success, scan failed.
+
+### P1: UX gap после первого `.exe` скриншота
+
+- [ ] Настоящие иконки валют в каждом узле маршрута, а не только текстовые бейджи `EX/DIV/IT`.
+- [ ] Компактная строка маршрута с иконками `Exalted -> Omen -> Divine -> Exalted` и раскрытием полного названия по tooltip.
+- [ ] Иконки на основных кнопках: scan, candidates, export, settings, minimize, close.
+- [ ] Подключить кнопку `Экспорт` к реальному CSV save dialog, а не placeholder.
+- [ ] Подключить кнопку `Кандидаты` к live poe.ninja/API списку внутри UI.
+- [ ] Подключить `Скан пары` к capture -> OCR -> расчету без CLI.
+- [ ] Подключить `Скан цепочки` к guided flow по нескольким NPC парам.
+- [ ] Сделать game-friendly compact mode: меньше текста, больше чисел/иконок, без горизонтальной перегрузки.
+- [ ] Добавить clear empty/loading/success states для каждой кнопки действия.
+- [ ] Добавить pin/unpin и click-through режим, если Windows overlay поверх POE2 позволит это безопасно.
+- [ ] Добавить настройку размера шрифта и масштаба таблицы под 1080p/1440p/4K.
 
 ### P1: calibration UX
 
@@ -300,29 +315,29 @@ score =
 
 ### Дополнительные связки, которые стоит добавить
 
-- [ ] Spread capture: `Currency A -> Currency B -> Currency A`, если NPC bid/ask на разных направлениях дает положительный цикл.
-- [ ] Stable hub arbitrage: `Exalted -> Chaos -> Item -> Exalted`.
-- [ ] Divine hub arbitrage: `Divine -> Chaos -> Item -> Divine`.
-- [ ] Omen/Rune basket arbitrage: несколько похожих items против одной базовой валюты.
-- [ ] Trend-confirmed flip: live profit + positive 7d trend + high volume.
-- [ ] Mean-reversion candidate: live NPC price сильно ниже poe.ninja baseline.
-- [ ] Liquidity-first route: не максимальный ROI, а максимальный `profit/hour` при большом volume.
-- [ ] Low-cap high-ROI route: отдельный risky режим для малых объемов.
-- [ ] Same-family swaps: rune -> rune, essence -> essence, omen -> omen через Divine/Exalted hub.
-- [ ] Currency triangle: `Exalted -> Chaos -> Divine -> Exalted`, `Divine -> Chaos -> Exalted -> Divine`.
-- [ ] Four-hop hub: `Exalted -> Item A -> Chaos -> Item B -> Exalted`.
-- [ ] Five-hop research: `Base -> Item A -> Hub 1 -> Item B -> Hub 2 -> Base`.
+- [x] Spread capture: `Currency A -> Currency B -> Currency A`, если NPC bid/ask на разных направлениях дает положительный цикл.
+- [x] Stable hub arbitrage: `Exalted -> Chaos -> Item -> Exalted`.
+- [x] Divine hub arbitrage: `Divine -> Chaos -> Item -> Divine`.
+- [x] Omen/Rune/Essence basket arbitrage: несколько похожих items против одной базовой валюты.
+- [x] Trend-confirmed flip: live profit + positive 7d trend + high volume. Классификатор есть, полноценное срабатывание требует live trend data.
+- [x] Mean-reversion candidate: live NPC price сильно ниже poe.ninja baseline. Классификатор есть, полноценное срабатывание требует baseline delta.
+- [x] Liquidity-first route: не максимальный ROI, а максимальный `profit/hour` при большом volume.
+- [x] Low-cap high-ROI route: отдельный risky режим для малых объемов.
+- [x] Same-family swaps: rune -> rune, essence -> essence, omen -> omen через Divine/Exalted hub.
+- [x] Currency triangle: `Exalted -> Chaos -> Divine -> Exalted`, `Divine -> Chaos -> Exalted -> Divine`.
+- [x] Four-hop hub: `Exalted -> Item A -> Chaos -> Item B -> Exalted`.
+- [x] Five-hop research: `Base -> Item A -> Hub 1 -> Item B -> Hub 2 -> Base`.
 
 ### Экономические проверки, которых еще не хватает
 
-- [ ] Market depth / stock limit для каждого ребра.
-- [ ] Max executable size для всей цепочки.
+- [x] Market depth / stock limit для каждого ребра через `observed_stock` в `RateEdge`/`OpportunityStep`.
+- [x] Max executable size для всей цепочки через минимальный stock по ребрам.
 - [ ] Rounding loss по каждому шагу, а не только flat estimate.
 - [ ] Gold cost model по шагам.
 - [ ] Stale-data penalty.
 - [ ] OCR confidence penalty по конкретному ребру.
-- [ ] Liquidity factor из poe.ninja/API.
-- [ ] Trend factor из poe.ninja.
+- [x] Liquidity factor из observed stock/API-полей, если источник их передает.
+- [ ] Trend factor из poe.ninja/API в live opportunities.
 - [ ] Execution time estimate: clicks/steps per cycle.
 - [ ] Profit/hour с учетом execution time, а не только `cycles_per_hour` вручную.
 - [ ] Kill-switch: скрывать цепочки с отрицательным net после всех потерь.
@@ -389,7 +404,7 @@ Path | Input | Output | Net Profit | ROI % | Max Size | Confidence | Age
 
 - [x] Screen capture/crop scaffold.
 - [x] Screen capture/crop region runtime verification на сохраненном screenshot.
-- [ ] OCR ratio на сохраненных screenshots. Требует системный `tesseract`.
+- [x] OCR ratio на сохраненных screenshots.
 - [ ] OCR ratio на live screenshots.
 
 ### Milestone 3
