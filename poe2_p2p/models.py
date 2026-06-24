@@ -39,6 +39,19 @@ class RateEdge:
 
 
 @dataclass(frozen=True)
+class OpportunityStep:
+    from_currency: str
+    to_currency: str
+    input_amount: float
+    output_amount: float
+    rate: float
+    source: str
+    confidence: float
+    observed_stock: float | None = None
+    age_seconds: float = 0.0
+
+
+@dataclass(frozen=True)
 class Opportunity:
     path: tuple[str, ...]
     input_currency: str
@@ -57,6 +70,8 @@ class Opportunity:
     age_seconds: float = 0.0
     volume_score: float = 0.0
     execution_steps: int = 0
+    steps: tuple[OpportunityStep, ...] = ()
+    risk_reasons: tuple[str, ...] = ()
 
     @property
     def path_label(self) -> str:

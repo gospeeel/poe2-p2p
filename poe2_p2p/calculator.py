@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from math import prod
 
-from .models import ChainType, Opportunity, RateEdge
+from .models import ChainType, Opportunity, OpportunityStep, RateEdge
 
 
 CORE_CURRENCIES = {"Exalted Orb", "Divine Orb", "Chaos Orb"}
@@ -121,13 +121,22 @@ class ArbitrageCalculator:
         profit_per_hour = net_profit * self.cycles_per_hour
         score = profit_per_hour * confidence
         source = ", ".join(edge.source for edge in edges)
-        risk = self._risk_label(roi_percent=roi_percent, confidence=confidence)
         stocks = [edge.observed_stock for edge in edges if edge.observed_stock is not None]
         max_size = min(stocks) if stocks else None
         age_seconds = max(
             (datetime.now(UTC) - edge.timestamp).total_seconds()
             for edge in edges
         ) if edges else 0.0
+        steps = self._build_steps(input_amount, edges)
+        risk, risk_reasons = self._risk_label(
+            roi_percent=roi_percent,
+            confidence=confidence,
+            age_seconds=age_seconds,
+            max_size=max_size,
+            net_profit=net_profit,
+            variable_loss=variable_loss,
+            fixed_loss=fixed_loss,
+        )
 
         return Opportunity(
             path=path,
@@ -147,15 +156,60 @@ class ArbitrageCalculator:
             age_seconds=age_seconds,
             volume_score=0.0,
             execution_steps=len(edges),
+            steps=steps,
+            risk_reasons=risk_reasons,
         )
 
     @staticmethod
-    def _risk_label(roi_percent: float, confidence: float) -> str:
-        if confidence >= 0.95 and roi_percent >= 2:
-            return "low"
+    def _build_steps(input_amount: float, edges: tuple[RateEdge, ...]) -> tuple[OpportunityStep, ...]:
+        steps = []
+        current_amount = input_amount
+        now = datetime.now(UTC)
+        for edge in edges:
+            output_amount = edge.convert(current_amount)
+            steps.append(
+                OpportunityStep(
+                    from_currency=edge.from_currency,
+                    to_currency=edge.to_currency,
+                    input_amount=current_amount,
+                    output_amount=output_amount,
+                    rate=edge.rate,
+                    source=edge.source,
+                    confidence=edge.confidence,
+                    observed_stock=edge.observed_stock,
+                    age_seconds=(now - edge.timestamp).total_seconds(),
+                )
+            )
+            current_amount = output_amount
+        return tuple(steps)
+
+    @staticmethod
+    def _risk_label(
+        roi_percent: float,
+        confidence: float,
+        age_seconds: float,
+        max_size: float | None,
+        net_profit: float,
+        variable_loss: float,
+        fixed_loss: float,
+    ) -> tuple[str, tuple[str, ...]]:
+        reasons = []
+        if confidence < 0.85:
+            reasons.append("низкая уверенность OCR/данных")
+        if age_seconds > 120:
+            reasons.append("курс старше 120 секунд")
+        if max_size is None:
+            reasons.append("нет данных по доступному объему")
+        if net_profit <= 0:
+            reasons.append("чистый профит не положительный")
+        if variable_loss + fixed_loss > 0:
+            reasons.append("есть потери на spread, округление или стоимость действий")
+
+        if confidence >= 0.95 and roi_percent >= 2 and age_seconds <= 120:
+            return "low", tuple(reasons or ["нет явных факторов риска"])
         if confidence >= 0.85 and roi_percent >= 1:
-            return "medium"
-        return "high"
+            return "medium", tuple(reasons or ["умеренный риск исполнения"])
+        return "high", tuple(reasons or ["высокий риск по доходности или уверенности"])
 
     @staticmethod
     def _classify_chain(path: tuple[str, ...]) -> ChainType:

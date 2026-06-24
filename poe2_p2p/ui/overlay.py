@@ -44,6 +44,7 @@ from ..logging_utils import LOG_DIR, LOG_FILE
 from ..global_hotkeys import GlobalHotkeyManager
 from ..models import CHAIN_TYPE_LABELS, ChainType, Opportunity
 from ..ocr import detect_tesseract_cmd
+from ..presets import STRATEGY_PRESETS
 from ..settings import ACTION_LABELS, AppSettings, find_hotkey_conflicts, load_settings, save_settings
 from ..storage import SQLiteStore
 from ..updater import check_for_updates
@@ -568,7 +569,7 @@ class OverlayWindow(QMainWindow):
         self._delayed_tip(self.sort_filter, "Порядок сортировки найденных связок.")
 
         self.quick_preset = QComboBox()
-        self.quick_preset.addItems(["Свои фильтры", "Безопасный", "Баланс", "Агрессивный"])
+        self.quick_preset.addItems(["Свои фильтры", *(preset.label for preset in STRATEGY_PRESETS.values())])
         self.quick_preset.currentIndexChanged.connect(self.apply_quick_preset)
         self._delayed_tip(
             self.quick_preset,
@@ -619,7 +620,7 @@ class OverlayWindow(QMainWindow):
         opportunities_layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(13)
+        self.table.setColumnCount(14)
         self.table.setHorizontalHeaderLabels(
             [
                 "Иконки",
@@ -645,6 +646,7 @@ class OverlayWindow(QMainWindow):
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.setMouseTracking(True)
+        self.table.itemSelectionChanged.connect(self.update_explain_view)
         self.table_tooltip_filter = TableDelayedToolTipFilter(self.table)
         self.table.viewport().installEventFilter(self.table_tooltip_filter)
         opportunities_layout.addWidget(self.table, 1)
@@ -673,6 +675,11 @@ class OverlayWindow(QMainWindow):
             "История",
             self._history_text(),
             "История помогает понять, какие связки повторяются и сколько профита они давали раньше.",
+        )
+        self.explain_view = self._text_tab(
+            "Разбор",
+            "Выбери связку в таблице, чтобы увидеть расчет по шагам.",
+            "Разбор показывает, какой курс использовался на каждом шаге и откуда берется итоговый профит.",
         )
         self.settings_view = self._settings_tab()
         self.ocr_debug_view = self._text_tab(
@@ -859,22 +866,24 @@ class OverlayWindow(QMainWindow):
                     item.setIcon(self._icon_for_currency(opportunity.path[0]))
                 if column in {5, 6} and opportunity.net_profit > 0:
                     item.setForeground(QColor("#4bd16f"))
-                if column == 9 and opportunity.risk == "high":
+                if column == 13 and opportunity.risk == "high":
                     item.setForeground(QColor("#ff6b6b"))
                 self.table.setItem(row, column, item)
             self.table.setRowHeight(row, 24 if self.compact_mode else 34)
+        if opportunities:
+            self.table.selectRow(0)
+        else:
+            self.update_explain_view()
 
     def apply_quick_preset(self) -> None:
         preset = self.quick_preset.currentText()
-        if preset == "Безопасный":
-            self.min_roi_filter.setValue(2.0)
-            self.min_confidence_filter.setValue(0.85)
-        elif preset == "Баланс":
-            self.min_roi_filter.setValue(1.0)
-            self.min_confidence_filter.setValue(0.70)
-        elif preset == "Агрессивный":
-            self.min_roi_filter.setValue(0.5)
-            self.min_confidence_filter.setValue(0.00)
+        strategy = next((item for item in STRATEGY_PRESETS.values() if item.label == preset), None)
+        if strategy:
+            self.min_roi_filter.setValue(strategy.min_roi_percent)
+            self.min_confidence_filter.setValue(strategy.min_confidence)
+            self.min_volume_filter.setValue(strategy.min_volume_score)
+            self.sort_filter.setCurrentText("Профит/ч" if strategy.prefer_profit_per_hour else "Доходность")
+            self.status_label.setText(strategy.description)
         self.apply_filters()
 
     def _sort_opportunities(self, opportunities: list[Opportunity]) -> list[Opportunity]:
@@ -1047,6 +1056,7 @@ class OverlayWindow(QMainWindow):
         return ALIASES.get(name, name)
 
     def _opportunity_tooltip(self, opportunity: Opportunity) -> str:
+        risk_reasons = "; ".join(opportunity.risk_reasons) if opportunity.risk_reasons else "нет данных"
         return (
             f"Связка: {self._path_label(opportunity)}\n"
             f"Тип: {CHAIN_TYPE_LABELS.get(opportunity.chain_type, 'неизвестно')}\n"
@@ -1059,6 +1069,7 @@ class OverlayWindow(QMainWindow):
             f"Оценка объема: {opportunity.volume_score:.0f}\n"
             f"Максимальный размер: {'нет данных' if opportunity.max_size is None else f'{opportunity.max_size:.0f}'}\n"
             f"Шагов исполнения: {opportunity.execution_steps}\n"
+            f"Причины риска: {risk_reasons}\n"
             f"Источник курсов: {opportunity.source}\n\n"
             "Доходность показывает прибыль одного полного цикла в процентах. "
             "Профит/ч зависит от скорости исполнения и будет точнее после сканирования игры."
@@ -1069,6 +1080,54 @@ class OverlayWindow(QMainWindow):
         if seconds < 60:
             return f"{seconds:.0f} сек"
         return f"{seconds / 60:.1f} мин"
+
+    def update_explain_view(self) -> None:
+        if not hasattr(self, "explain_view"):
+            return
+        selected = self.table.selectedItems()
+        if not selected:
+            self.explain_view.setPlainText("Выбери связку в таблице, чтобы увидеть расчет по шагам.")
+            return
+        row = selected[0].row()
+        if row >= len(self.filtered_opportunities):
+            return
+        opportunity = self.filtered_opportunities[row]
+        self.explain_view.setPlainText(self._explain_text(opportunity))
+
+    def _explain_text(self, opportunity: Opportunity) -> str:
+        lines = [
+            f"Связка: {self._path_label(opportunity)}",
+            f"Тип: {CHAIN_TYPE_LABELS.get(opportunity.chain_type, 'неизвестно')}",
+            "",
+            "Шаги:",
+        ]
+        for index, step in enumerate(opportunity.steps, start=1):
+            lines.append(
+                f"{index}. {self._alias(step.from_currency)} -> {self._alias(step.to_currency)} | "
+                f"вход {step.input_amount:.4f}, выход {step.output_amount:.4f}, курс {step.rate:.8f}"
+            )
+            lines.append(
+                f"   источник: {step.source}; уверенность: {step.confidence:.2f}; "
+                f"возраст: {self._age_label(step.age_seconds)}; "
+                f"объем: {'нет данных' if step.observed_stock is None else f'{step.observed_stock:.0f}'}"
+            )
+        lines.extend(
+            [
+                "",
+                "Итог:",
+                f"Вход: {opportunity.input_amount:.4f} {self._alias(opportunity.input_currency)}",
+                f"Выход: {opportunity.output_amount:.4f} {self._alias(opportunity.input_currency)}",
+                f"Валовый профит: {opportunity.gross_profit:.4f}",
+                f"Чистый профит: {opportunity.net_profit:.4f}",
+                f"Доходность: {opportunity.roi_percent:.2f}%",
+                f"Профит/ч: {opportunity.profit_per_hour:.4f}",
+                "",
+                "Причины риска:",
+            ]
+        )
+        for reason in opportunity.risk_reasons or ("нет данных",):
+            lines.append(f"- {reason}")
+        return "\n".join(lines)
 
     @staticmethod
     def _build_icon() -> QIcon:

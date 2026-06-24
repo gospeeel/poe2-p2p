@@ -296,7 +296,7 @@ score =
 - [x] Явная классификация найденной цепочки по типу: direct/reverse/triangular/cross-currency/multi-hop.
 - [x] Отдельный UI-фильтр по chain type.
 - [x] Отдельные presets для каждого chain type.
-- [ ] Explain view: какая часть profit пришла из какого ребра.
+- [x] Explain view: какая часть profit пришла из какого ребра.
 
 ### Дополнительные связки, которые стоит добавить
 
@@ -327,13 +327,13 @@ score =
 - [ ] Profit/hour с учетом execution time, а не только `cycles_per_hour` вручную.
 - [ ] Kill-switch: скрывать цепочки с отрицательным net после всех потерь.
 - [ ] Minimum bankroll filter: сколько валюты нужно для meaningful cycle.
-- [ ] Risk labels: low/medium/high с понятной причиной.
+- [x] Risk labels: low/medium/high с понятной причиной.
 
 ### Следующий экономический milestone
 
 - [x] Добавить `ChainType` enum.
 - [x] Классифицировать opportunities после поиска цикла.
-- [ ] Добавить `StrategyPreset`: safe, balanced, aggressive, high-volume, high-roi.
+- [x] Добавить `StrategyPreset`: safe, balanced, aggressive, high-volume, high-roi.
 - [x] Выводить `max_size`, `age`, `volume_score`, `execution_steps`.
 - [x] Добавить тестовые sample chains для Chain 1-5.
 - [x] Добавить unit tests на классификацию и scoring.

@@ -14,7 +14,7 @@ from poe2_p2p.exporter import export_opportunities_csv
 from poe2_p2p.icon_cache import IconCache
 from poe2_p2p.models import ChainType, RateEdge
 from poe2_p2p.parser import normalize_ratio_to_edges, parse_ratio
-from poe2_p2p.presets import DEFAULT_PRESETS
+from poe2_p2p.presets import DEFAULT_PRESETS, STRATEGY_PRESETS
 from poe2_p2p.ranking import rank_opportunities
 from poe2_p2p.sample_data import EXALTED
 from poe2_p2p.settings import AppSettings, find_hotkey_conflicts, load_settings, save_settings
@@ -54,6 +54,10 @@ class CalculatorTest(unittest.TestCase):
         self.assertAlmostEqual(opportunity.net_profit, 181.68)
         self.assertAlmostEqual(opportunity.roi_percent, 8.862439, places=5)
         self.assertEqual(opportunity.chain_type, ChainType.DIRECT)
+        self.assertEqual(len(opportunity.steps), 3)
+        self.assertEqual(opportunity.steps[0].from_currency, EXALTED)
+        self.assertEqual(opportunity.steps[-1].to_currency, EXALTED)
+        self.assertIn("нет данных по доступному объему", opportunity.risk_reasons)
 
     def test_profit_adjustments_and_profit_per_hour(self):
         _, opportunities = build_sample_opportunities(
@@ -194,6 +198,11 @@ class UtilityTest(unittest.TestCase):
         self.assertIn(ChainType.CROSS_CURRENCY, covered)
         self.assertIn(ChainType.TRIANGULAR, covered)
         self.assertIn(ChainType.MULTI_HOP, covered)
+        self.assertIn("safe", STRATEGY_PRESETS)
+        self.assertIn("balanced", STRATEGY_PRESETS)
+        self.assertIn("aggressive", STRATEGY_PRESETS)
+        self.assertIn("high-volume", STRATEGY_PRESETS)
+        self.assertIn("high-roi", STRATEGY_PRESETS)
 
     def test_icon_cache_reads_local_index(self):
         with TemporaryDirectory() as directory:
