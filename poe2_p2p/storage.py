@@ -55,6 +55,10 @@ class SQLiteStore:
                     profit_per_hour REAL DEFAULT 0 NOT NULL,
                     score REAL DEFAULT 0 NOT NULL,
                     risk TEXT DEFAULT 'unknown' NOT NULL,
+                    max_size REAL,
+                    age_seconds REAL DEFAULT 0 NOT NULL,
+                    volume_score REAL DEFAULT 0 NOT NULL,
+                    execution_steps INTEGER DEFAULT 0 NOT NULL,
                     source TEXT NOT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 );
@@ -73,6 +77,10 @@ class SQLiteStore:
             "score": "ALTER TABLE opportunities ADD COLUMN score REAL DEFAULT 0 NOT NULL",
             "risk": "ALTER TABLE opportunities ADD COLUMN risk TEXT DEFAULT 'unknown' NOT NULL",
             "chain_type": "ALTER TABLE opportunities ADD COLUMN chain_type TEXT DEFAULT 'unknown' NOT NULL",
+            "max_size": "ALTER TABLE opportunities ADD COLUMN max_size REAL",
+            "age_seconds": "ALTER TABLE opportunities ADD COLUMN age_seconds REAL DEFAULT 0 NOT NULL",
+            "volume_score": "ALTER TABLE opportunities ADD COLUMN volume_score REAL DEFAULT 0 NOT NULL",
+            "execution_steps": "ALTER TABLE opportunities ADD COLUMN execution_steps INTEGER DEFAULT 0 NOT NULL",
         }
         for column, statement in migrations.items():
             if column not in existing:
@@ -123,8 +131,12 @@ class SQLiteStore:
                     profit_per_hour,
                     score,
                     risk,
+                    max_size,
+                    age_seconds,
+                    volume_score,
+                    execution_steps,
                     source
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -140,6 +152,10 @@ class SQLiteStore:
                         opportunity.profit_per_hour,
                         opportunity.score,
                         opportunity.risk,
+                        opportunity.max_size,
+                        opportunity.age_seconds,
+                        opportunity.volume_score,
+                        opportunity.execution_steps,
                         opportunity.source,
                     )
                     for opportunity in opportunities
@@ -163,6 +179,10 @@ class SQLiteStore:
                     score,
                     confidence,
                     risk,
+                    max_size,
+                    age_seconds,
+                    volume_score,
+                    execution_steps,
                     created_at
                 FROM opportunities
                 ORDER BY id DESC

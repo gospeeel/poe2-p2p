@@ -20,6 +20,8 @@ class AppSettings:
     )
     opacity: int = 94
     always_on_top: bool = True
+    first_run_complete: bool = False
+    league: str = "Runes of Aldur"
 
 
 ACTION_LABELS = {
@@ -39,6 +41,8 @@ def load_settings(path: str | Path = DEFAULT_SETTINGS_PATH) -> AppSettings:
     settings.hotkeys.update(data.get("hotkeys", {}))
     settings.opacity = int(data.get("opacity", settings.opacity))
     settings.always_on_top = bool(data.get("always_on_top", settings.always_on_top))
+    settings.first_run_complete = bool(data.get("first_run_complete", settings.first_run_complete))
+    settings.league = str(data.get("league", settings.league))
     return settings
 
 

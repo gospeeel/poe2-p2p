@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import sys
+import os
+from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QFont, QIcon, QPainter, QPixmap, QShortcut
+from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QIcon, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -25,8 +27,10 @@ from PySide6.QtWidgets import (
     QSlider,
     QSpinBox,
     QSystemTrayIcon,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QTextEdit,
     QToolTip,
     QVBoxLayout,
     QWidget,
@@ -36,9 +40,13 @@ from ..calibration import save_region
 from ..capture import CaptureDependencyError, crop_image_file
 from ..config import DEFAULT_MARKET_RATIO_REGION, CropRegion
 from ..icon_cache import IconCache
+from ..logging_utils import LOG_DIR, LOG_FILE
 from ..global_hotkeys import GlobalHotkeyManager
 from ..models import CHAIN_TYPE_LABELS, ChainType, Opportunity
+from ..ocr import detect_tesseract_cmd
 from ..settings import ACTION_LABELS, AppSettings, find_hotkey_conflicts, load_settings, save_settings
+from ..storage import SQLiteStore
+from ..updater import check_for_updates
 
 
 ALIASES = {
@@ -325,6 +333,53 @@ class CalibrationDialog(QDialog):
         return spin
 
 
+class FirstRunDialog(QDialog):
+    def __init__(self, settings: AppSettings, parent=None) -> None:
+        super().__init__(parent)
+        self.settings = settings
+        self.setWindowTitle("Первый запуск")
+        self.setMinimumWidth(520)
+        layout = QVBoxLayout(self)
+
+        tesseract = detect_tesseract_cmd()
+        tesseract_status = f"найден: {tesseract}" if tesseract else "не найден"
+        intro = QLabel(
+            "Быстрая настройка POE2 P2P.\n\n"
+            f"Tesseract OCR: {tesseract_status}\n"
+            "После этого стоит открыть `Калибровка` и проверить область Market Ratio."
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        form = QFormLayout()
+        self.league_input = QLineEdit(settings.league)
+        form.addRow("Лига poe.ninja", self.league_input)
+        layout.addLayout(form)
+
+        hotkeys = QLabel(
+            "Бинды по умолчанию:\n"
+            "Скан пары: Ctrl+1\n"
+            "Показать/скрыть окно: Ctrl+H\n"
+            "Скан кандидатов: Ctrl+2\n"
+            "Пауза/продолжить: Ctrl+P"
+        )
+        hotkeys.setWordWrap(True)
+        layout.addWidget(hotkeys)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Готово")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Позже")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def accept(self) -> None:
+        self.settings.league = self.league_input.text().strip() or self.settings.league
+        self.settings.first_run_complete = True
+        save_settings(self.settings)
+        super().accept()
+
+
 class OverlayWindow(QMainWindow):
     def __init__(self, opportunities: list[Opportunity]) -> None:
         super().__init__()
@@ -336,6 +391,7 @@ class OverlayWindow(QMainWindow):
         self.paused = False
         self.tooltip_filter = DelayedToolTipFilter()
         self.setWindowTitle("POE2 P2P")
+        self.setWindowIcon(self._build_icon())
         self.setWindowFlags(
             Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool
@@ -358,26 +414,29 @@ class OverlayWindow(QMainWindow):
         self._build_filter_bar()
         self._build_status()
         self._build_table()
+        self._build_auxiliary_tabs()
         self._build_footer()
         self._build_tray()
         self._install_shortcuts()
         self._install_global_hotkeys()
         self._apply_style()
         self.apply_filters()
+        if not self.settings.first_run_complete and os.environ.get("POE2_P2P_SKIP_FIRST_RUN") != "1":
+            QTimer.singleShot(300, self.open_first_run_wizard)
 
     def _build_title_bar(self) -> None:
         self.title_bar = TitleBar(self)
         layout = QHBoxLayout(self.title_bar)
         layout.setContentsMargins(8, 6, 8, 6)
 
-        title = QLabel("POE2 P2P")
+        title = QLabel(f"POE2 P2P v{__version__}")
         title.setObjectName("title")
         subtitle = QLabel("Источник: пример со скриншотов | Последнее обновление: сейчас")
         subtitle.setObjectName("subtitle")
         subtitle.installEventFilter(self.tooltip_filter)
         subtitle.setToolTip(
             "Пока таблица использует тестовые курсы со скриншотов. "
-            "Live scan будет подключен следующим этапом."
+            "Сканирование игры будет подключено следующим этапом."
         )
 
         title_box = QVBoxLayout()
@@ -427,7 +486,7 @@ class OverlayWindow(QMainWindow):
             ("Скан пары", self.scan_pair_placeholder, "Снять текущий Market Ratio из окна NPC Currency Exchange."),
             ("Скан цепочки", self.scan_chain_placeholder, "Проверить несколько шагов связки, например Exalted -> Item -> Divine -> Exalted."),
             ("Калибровка", self.open_calibration, "Настроить область экрана, из которой OCR читает Market Ratio."),
-            ("Кандидаты", self.refresh_candidates_placeholder, "Обновить список валют и items, которые стоит проверить первыми."),
+            ("Кандидаты", self.refresh_candidates_placeholder, "Обновить список валют и предметов, которые стоит проверить первыми."),
             ("Экспорт", self.export_placeholder, "Сохранить найденные возможности в CSV или отчет."),
         ]
         for label, callback, tip in actions:
@@ -488,6 +547,21 @@ class OverlayWindow(QMainWindow):
         self.min_profit_hour_filter.valueChanged.connect(self.apply_filters)
         self._delayed_tip(self.min_profit_hour_filter, "Показывать только связки с расчетным профитом в час выше указанного.")
 
+        self.max_age_filter = QDoubleSpinBox()
+        self.max_age_filter.setRange(0, 10_000)
+        self.max_age_filter.setDecimals(0)
+        self.max_age_filter.setSuffix(" сек")
+        self.max_age_filter.setValue(0)
+        self.max_age_filter.valueChanged.connect(self.apply_filters)
+        self._delayed_tip(self.max_age_filter, "Максимальный возраст данных. 0 означает не фильтровать по возрасту.")
+
+        self.min_volume_filter = QDoubleSpinBox()
+        self.min_volume_filter.setRange(0, 1_000_000_000)
+        self.min_volume_filter.setDecimals(0)
+        self.min_volume_filter.setPrefix("Объем ")
+        self.min_volume_filter.valueChanged.connect(self.apply_filters)
+        self._delayed_tip(self.min_volume_filter, "Минимальная оценка объема. Чем выше объем, тем проще исполнить связку.")
+
         self.sort_filter = QComboBox()
         self.sort_filter.addItems(["Профит", "Доходность", "Профит/ч", "Уверенность"])
         self.sort_filter.currentIndexChanged.connect(self.apply_filters)
@@ -507,6 +581,8 @@ class OverlayWindow(QMainWindow):
             ("Мин.", self.min_roi_filter),
             ("Профит", self.min_profit_filter),
             ("Профит/ч", self.min_profit_hour_filter),
+            ("Возраст", self.max_age_filter),
+            ("Объем", self.min_volume_filter),
             ("OCR", self.min_confidence_filter),
             ("Сортировка", self.sort_filter),
             ("Пресет", self.quick_preset),
@@ -523,7 +599,7 @@ class OverlayWindow(QMainWindow):
         self.status_label.setObjectName("status")
         self._delayed_tip(
             self.status_label,
-            "Статус последнего действия. Здесь будет видно, удался ли scan, OCR и пересчет связок.",
+            "Статус последнего действия. Здесь будет видно, удалось ли сканирование, OCR и пересчет связок.",
         )
         self.layout.addWidget(self.status_label)
         self.error_label = QLabel("")
@@ -536,8 +612,14 @@ class OverlayWindow(QMainWindow):
         self.layout.addWidget(self.error_label)
 
     def _build_table(self) -> None:
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("tabs")
+        self.opportunities_tab = QWidget()
+        opportunities_layout = QVBoxLayout(self.opportunities_tab)
+        opportunities_layout.setContentsMargins(0, 0, 0, 0)
+
         self.table = QTableWidget()
-        self.table.setColumnCount(10)
+        self.table.setColumnCount(13)
         self.table.setHorizontalHeaderLabels(
             [
                 "Иконки",
@@ -549,6 +631,10 @@ class OverlayWindow(QMainWindow):
                 "Доходность",
                 "Профит/ч",
                 "Уверенность",
+                "Возраст",
+                "Объем",
+                "Размер",
+                "Шаги",
                 "Риск",
             ]
         )
@@ -561,12 +647,105 @@ class OverlayWindow(QMainWindow):
         self.table.setMouseTracking(True)
         self.table_tooltip_filter = TableDelayedToolTipFilter(self.table)
         self.table.viewport().installEventFilter(self.table_tooltip_filter)
-        self.layout.addWidget(self.table, 1)
+        opportunities_layout.addWidget(self.table, 1)
 
-        self.empty_label = QLabel("Пока нет подходящих возможностей. Ослабь фильтры или выполни scan.")
+        self.empty_label = QLabel("Пока нет подходящих возможностей. Ослабь фильтры или выполни сканирование.")
         self.empty_label.setObjectName("empty")
         self.empty_label.hide()
-        self.layout.addWidget(self.empty_label)
+        opportunities_layout.addWidget(self.empty_label)
+        self.tabs.addTab(self.opportunities_tab, "Связки")
+        self.layout.addWidget(self.tabs, 1)
+
+    def _build_auxiliary_tabs(self) -> None:
+        self.live_scan_view = self._text_tab(
+            "Скан",
+            "Скан игры еще не подключен.\n\n"
+            "Здесь будет текущий снимок области, исходный OCR-текст, распознанный курс и результат проверки.",
+            "Сканирование показывает, что приложение реально прочитало из окна NPC Currency Exchange.",
+        )
+        self.candidates_view = self._text_tab(
+            "Кандидаты",
+            "Кандидаты пока обновляются через командную строку.\n\n"
+            "Следующий шаг: вывести здесь валюты и предметы с высокой оценкой объема и трендом.",
+            "Кандидаты - это список валют и предметов, которые стоит проверить в NPC первыми.",
+        )
+        self.history_view = self._text_tab(
+            "История",
+            self._history_text(),
+            "История помогает понять, какие связки повторяются и сколько профита они давали раньше.",
+        )
+        self.settings_view = self._settings_tab()
+        self.ocr_debug_view = self._text_tab(
+            "OCR",
+            "Отладка OCR пока доступна через калибровку.\n\n"
+            "Здесь будет предпросмотр снимка области, исходный текст, распознанный курс и уверенность.",
+            "OCR отладка нужна, чтобы быстро находить ошибки распознавания цифр и десятичных точек.",
+        )
+        self.graph_view = self._text_tab(
+            "Граф",
+            self._graph_text(),
+            "Граф показывает валюты как точки, а курсы обмена как ребра. Арбитраж - это прибыльный цикл в таком графе.",
+        )
+
+    def _text_tab(self, title: str, text: str, tooltip: str) -> QTextEdit:
+        view = QTextEdit()
+        view.setReadOnly(True)
+        view.setPlainText(text)
+        self._delayed_tip(view, tooltip)
+        self.tabs.addTab(view, title)
+        return view
+
+    def _settings_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        text = QLabel(
+            "Основные настройки уже доступны через диалог.\n\n"
+            "Следующие настройки: тема, глобальные бинды, OCR, профиль экрана и лига."
+        )
+        text.setWordWrap(True)
+        button = QPushButton("Открыть настройки")
+        button.clicked.connect(self.open_settings)
+        update_button = QPushButton("Проверить обновления")
+        update_button.clicked.connect(self.check_updates)
+        self._delayed_tip(
+            update_button,
+            "Проверяет GitHub Releases и сообщает, есть ли новый установщик.",
+        )
+        first_run_button = QPushButton("Первый запуск")
+        first_run_button.clicked.connect(self.open_first_run_wizard)
+        self._delayed_tip(first_run_button, "Повторно открыть мастер первого запуска.")
+        logs_button = QPushButton("Открыть логи")
+        logs_button.clicked.connect(self.open_logs)
+        self._delayed_tip(logs_button, "Открыть папку с файлом журнала ошибок.")
+        layout.addWidget(text)
+        layout.addWidget(button)
+        layout.addWidget(update_button)
+        layout.addWidget(first_run_button)
+        layout.addWidget(logs_button)
+        layout.addStretch(1)
+        self._delayed_tip(tab, "Раздел настроек приложения: бинды, OCR, внешний вид и профиль игры.")
+        self.tabs.addTab(tab, "Настройки")
+        return tab
+
+    def _history_text(self) -> str:
+        try:
+            rows = SQLiteStore().list_recent_opportunities(10)
+        except Exception:
+            rows = []
+        if not rows:
+            return "История пока пустая. Запусти расчет или сканирование, чтобы появились записи."
+        lines = []
+        for row in rows:
+            lines.append(
+                f"{row['created_at']} | {row['path']} | профит {row['net_profit']:.2f} | доходность {row['roi_percent']:.2f}%"
+            )
+        return "\n".join(lines)
+
+    def _graph_text(self) -> str:
+        lines = ["Текущий граф тестовых связок:"]
+        for opportunity in self.opportunities:
+            lines.append(f"- {self._path_label(opportunity)}")
+        return "\n".join(lines)
 
     def _build_footer(self) -> None:
         footer = QHBoxLayout()
@@ -627,6 +806,8 @@ class OverlayWindow(QMainWindow):
         min_confidence = self.min_confidence_filter.value() if hasattr(self, "min_confidence_filter") else 0
         min_profit = self.min_profit_filter.value() if hasattr(self, "min_profit_filter") else 0
         min_profit_hour = self.min_profit_hour_filter.value() if hasattr(self, "min_profit_hour_filter") else 0
+        max_age = self.max_age_filter.value() if hasattr(self, "max_age_filter") else 0
+        min_volume = self.min_volume_filter.value() if hasattr(self, "min_volume_filter") else 0
         for opportunity in self.opportunities:
             if base != "Любая база" and not opportunity.path_label.startswith(base):
                 continue
@@ -637,6 +818,10 @@ class OverlayWindow(QMainWindow):
             if opportunity.net_profit < min_profit:
                 continue
             if opportunity.profit_per_hour < min_profit_hour:
+                continue
+            if max_age and opportunity.age_seconds > max_age:
+                continue
+            if opportunity.volume_score < min_volume:
                 continue
             if opportunity.confidence < min_confidence:
                 continue
@@ -661,6 +846,10 @@ class OverlayWindow(QMainWindow):
                 f"{opportunity.roi_percent:.2f}%",
                 f"{opportunity.profit_per_hour:.2f}",
                 f"{opportunity.confidence:.2f}",
+                self._age_label(opportunity.age_seconds),
+                f"{opportunity.volume_score:.0f}",
+                "нет данных" if opportunity.max_size is None else f"{opportunity.max_size:.0f}",
+                str(opportunity.execution_steps),
                 RISK_LABELS.get(opportunity.risk, opportunity.risk),
             ]
             for column, value in enumerate(values):
@@ -753,6 +942,25 @@ class OverlayWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.status_label.setText("Калибровка сохранена в calibration.json.")
 
+    def check_updates(self) -> None:
+        status = check_for_updates()
+        self.status_label.setText(status.message)
+        if status.download_url:
+            self._delayed_tip(self.status_label, f"Ссылка на релиз: {status.download_url}")
+
+    def open_first_run_wizard(self) -> None:
+        dialog = FirstRunDialog(self.settings, self)
+        dialog.setStyleSheet(self.styleSheet())
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.status_label.setText("Первичная настройка сохранена.")
+
+    def open_logs(self) -> None:
+        LOG_DIR.mkdir(exist_ok=True)
+        if not LOG_FILE.exists():
+            LOG_FILE.write_text("Лог пока пуст.\n", encoding="utf-8")
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(LOG_DIR.resolve())))
+        self.status_label.setText(f"Папка логов: {LOG_DIR.resolve()}")
+
     def scan_pair_placeholder(self) -> None:
         self.show_error("Скан пары еще не подключен: нужен следующий этап снимка области игры + OCR.")
         self.status_label.setText("Скан пары еще не подключен. Следующий этап: снимок области игры + OCR.")
@@ -761,10 +969,10 @@ class OverlayWindow(QMainWindow):
         self.status_label.setText("Скан цепочки еще не подключен. Сейчас доступны расчетные примеры.")
 
     def refresh_candidates_placeholder(self) -> None:
-        self.status_label.setText("Кандидаты обновляются через poe.ninja в CLI; UI-подключение будет следующим.")
+        self.status_label.setText("Кандидаты обновляются через poe.ninja в командной строке; подключение к UI будет следующим.")
 
     def export_placeholder(self) -> None:
-        self.status_label.setText("Экспорт доступен через CLI. UI-кнопка будет подключена к CSV следующим этапом.")
+        self.status_label.setText("Экспорт доступен через командную строку. Кнопка будет подключена к CSV следующим этапом.")
 
     def show_error(self, message: str) -> None:
         self.error_label.setText(message)
@@ -847,13 +1055,26 @@ class OverlayWindow(QMainWindow):
             f"Чистый профит: {opportunity.net_profit:.2f}\n"
             f"Доходность: {opportunity.roi_percent:.2f}%\n"
             f"Уверенность данных: {opportunity.confidence:.2f}\n"
+            f"Возраст данных: {self._age_label(opportunity.age_seconds)}\n"
+            f"Оценка объема: {opportunity.volume_score:.0f}\n"
+            f"Максимальный размер: {'нет данных' if opportunity.max_size is None else f'{opportunity.max_size:.0f}'}\n"
+            f"Шагов исполнения: {opportunity.execution_steps}\n"
             f"Источник курсов: {opportunity.source}\n\n"
             "Доходность показывает прибыль одного полного цикла в процентах. "
             "Профит/ч зависит от скорости исполнения и будет точнее после сканирования игры."
         )
 
     @staticmethod
+    def _age_label(seconds: float) -> str:
+        if seconds < 60:
+            return f"{seconds:.0f} сек"
+        return f"{seconds / 60:.1f} мин"
+
+    @staticmethod
     def _build_icon() -> QIcon:
+        icon_path = Path(__file__).resolve().parents[2] / "assets" / "app_icon.ico"
+        if icon_path.exists():
+            return QIcon(str(icon_path))
         pixmap = QPixmap(32, 32)
         pixmap.fill(QColor("#2f8cff"))
         return QIcon(pixmap)
@@ -941,3 +1162,4 @@ def run_overlay(opportunities: list[Opportunity]) -> int:
     window = OverlayWindow(opportunities)
     window.show()
     return app.exec()
+from .. import __version__

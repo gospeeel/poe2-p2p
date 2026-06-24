@@ -23,6 +23,10 @@ def export_opportunities_csv(opportunities: list[Opportunity], path: str | Path)
                 "score",
                 "confidence",
                 "risk",
+                "max_size",
+                "age_seconds",
+                "volume_score",
+                "execution_steps",
                 "source",
             ]
         )
@@ -41,6 +45,10 @@ def export_opportunities_csv(opportunities: list[Opportunity], path: str | Path)
                     f"{opportunity.score:.8f}",
                     f"{opportunity.confidence:.8f}",
                     opportunity.risk,
+                    "" if opportunity.max_size is None else f"{opportunity.max_size:.8f}",
+                    f"{opportunity.age_seconds:.8f}",
+                    f"{opportunity.volume_score:.8f}",
+                    opportunity.execution_steps,
                     opportunity.source,
                 ]
             )

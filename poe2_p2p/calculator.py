@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import UTC, datetime
 from math import prod
 
 from .models import ChainType, Opportunity, RateEdge
@@ -121,6 +122,12 @@ class ArbitrageCalculator:
         score = profit_per_hour * confidence
         source = ", ".join(edge.source for edge in edges)
         risk = self._risk_label(roi_percent=roi_percent, confidence=confidence)
+        stocks = [edge.observed_stock for edge in edges if edge.observed_stock is not None]
+        max_size = min(stocks) if stocks else None
+        age_seconds = max(
+            (datetime.now(UTC) - edge.timestamp).total_seconds()
+            for edge in edges
+        ) if edges else 0.0
 
         return Opportunity(
             path=path,
@@ -136,6 +143,10 @@ class ArbitrageCalculator:
             score=score,
             risk=risk,
             chain_type=self._classify_chain(path),
+            max_size=max_size,
+            age_seconds=age_seconds,
+            volume_score=0.0,
+            execution_steps=len(edges),
         )
 
     @staticmethod

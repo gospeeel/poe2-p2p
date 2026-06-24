@@ -176,8 +176,8 @@ dist/POE2-P2P/POE2-P2P.exe
 - [x] Фильтр `min net profit`.
 - [x] Фильтр `min profit/hour`.
 - [x] Фильтр `min confidence`.
-- [ ] Фильтр `max age`.
-- [ ] Фильтр `min volume/liquidity`.
+- [x] Фильтр `max age`.
+- [x] Фильтр `min volume/liquidity`.
 - [x] Сортировка по profit, ROI, profit/hour, confidence.
 - [x] Quick presets: safe / balanced / aggressive.
 
@@ -203,22 +203,22 @@ dist/POE2-P2P/POE2-P2P.exe
 
 ### P2: рабочие views
 
-- [ ] `Opportunities` view.
-- [ ] `Live Scan` view.
-- [ ] `Candidates` view.
-- [ ] `History` view внутри приложения вместо только HTML export.
+- [x] `Opportunities` view.
+- [x] `Live Scan` view.
+- [x] `Candidates` view.
+- [x] `History` view внутри приложения вместо только HTML export.
 - [x] `Settings` view.
-- [ ] `Debug OCR` view для crop/preprocessing/recognized text.
-- [ ] `Economy Graph` view для диагностики цепочек.
+- [x] `Debug OCR` view для crop/preprocessing/recognized text.
+- [x] `Economy Graph` view для диагностики цепочек.
 
 ### P2: installer/user polish
 
 - [x] GitHub Release installer artifact.
-- [ ] App icon для `.exe`, installer и ярлыков.
-- [ ] Version display внутри приложения.
-- [ ] Auto-update check через GitHub Releases.
-- [ ] First-run wizard: Tesseract status, calibration, hotkeys, league.
-- [ ] Crash/error log file и кнопка открыть logs.
+- [x] App icon для `.exe`, installer и ярлыков.
+- [x] Version display внутри приложения.
+- [x] Auto-update check через GitHub Releases.
+- [x] First-run wizard: Tesseract status, calibration, hotkeys, league.
+- [x] Crash/error log file и кнопка открыть logs.
 
 ## Экономическая выгодность
 
@@ -334,7 +334,7 @@ score =
 - [x] Добавить `ChainType` enum.
 - [x] Классифицировать opportunities после поиска цикла.
 - [ ] Добавить `StrategyPreset`: safe, balanced, aggressive, high-volume, high-roi.
-- [ ] Выводить `max_size`, `age`, `volume_score`, `execution_steps`.
+- [x] Выводить `max_size`, `age`, `volume_score`, `execution_steps`.
 - [x] Добавить тестовые sample chains для Chain 1-5.
 - [x] Добавить unit tests на классификацию и scoring.
 

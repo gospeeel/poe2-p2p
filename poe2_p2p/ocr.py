@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import shutil
 import sys
 
 from .parser import parse_ratio
@@ -72,11 +73,19 @@ def read_ratio_from_image(image_path: str | Path) -> RatioOCRResult:
 
 
 def _configure_tesseract_cmd(pytesseract_module) -> None:
-    configured = os.environ.get("TESSERACT_CMD")
-    if configured:
-        pytesseract_module.pytesseract.tesseract_cmd = configured
+    detected = detect_tesseract_cmd()
+    if detected:
+        pytesseract_module.pytesseract.tesseract_cmd = detected
         return
 
+
+def detect_tesseract_cmd() -> str | None:
+    configured = os.environ.get("TESSERACT_CMD")
+    if configured and Path(configured).exists():
+        return configured
+    from_path = shutil.which("tesseract")
+    if from_path:
+        return from_path
     candidates = [
         Path(sys.executable).resolve().parent / "tesseract" / "tesseract.exe",
         Path.cwd() / "tesseract" / "tesseract.exe",
@@ -84,5 +93,5 @@ def _configure_tesseract_cmd(pytesseract_module) -> None:
     ]
     for candidate in candidates:
         if candidate.exists():
-            pytesseract_module.pytesseract.tesseract_cmd = str(candidate)
-            return
+            return str(candidate)
+    return None

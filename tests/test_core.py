@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import Mock, patch
 from tempfile import TemporaryDirectory
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from poe2_p2p.ranking import rank_opportunities
 from poe2_p2p.sample_data import EXALTED
 from poe2_p2p.settings import AppSettings, find_hotkey_conflicts, load_settings, save_settings
 from poe2_p2p.storage import SQLiteStore
+from poe2_p2p.updater import check_for_updates
 from poe2_p2p.validation import validate_ratio_range
 
 
@@ -211,16 +213,39 @@ class UtilityTest(unittest.TestCase):
             settings.hotkeys["scan_pair"] = "Ctrl+1"
             settings.hotkeys["toggle_overlay"] = "Ctrl+H"
             settings.opacity = 88
+            settings.first_run_complete = True
+            settings.league = "Test League"
             save_settings(settings, path)
 
             loaded = load_settings(path)
             self.assertEqual(loaded.opacity, 88)
             self.assertEqual(loaded.hotkeys["scan_pair"], "Ctrl+1")
+            self.assertTrue(loaded.first_run_complete)
+            self.assertEqual(loaded.league, "Test League")
 
             conflicts = find_hotkey_conflicts(
                 {"scan_pair": "Ctrl+1", "toggle_overlay": "ctrl+1", "pause_resume": "Ctrl+P"}
             )
             self.assertIn("ctrl+1", conflicts)
+
+    def test_update_check_detects_new_release(self):
+        response = Mock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "tag_name": "v9.9.9",
+            "html_url": "https://example.test/release",
+            "assets": [
+                {
+                    "name": "POE2-P2P-Setup.exe",
+                    "browser_download_url": "https://example.test/setup.exe",
+                }
+            ],
+        }
+        with patch("requests.get", return_value=response):
+            status = check_for_updates()
+        self.assertTrue(status.checked)
+        self.assertTrue(status.update_available)
+        self.assertEqual(status.download_url, "https://example.test/setup.exe")
 
 
 class ConfigTest(unittest.TestCase):

@@ -54,6 +54,9 @@ class Opportunity:
     risk: str = "unknown"
     max_size: float | None = None
     chain_type: ChainType = ChainType.UNKNOWN
+    age_seconds: float = 0.0
+    volume_score: float = 0.0
+    execution_steps: int = 0
 
     @property
     def path_label(self) -> str:

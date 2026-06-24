@@ -10,6 +10,7 @@ icon_cache/
 settings.json
 calibration.json
 _calibration_preview.png
+logs/
 *.db
 *.sqlite
 *.sqlite3
