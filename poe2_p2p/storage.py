@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 import sqlite3
 from pathlib import Path
+from typing import Iterator
 
 from .models import Opportunity, RateEdge
 
@@ -15,8 +17,17 @@ class SQLiteStore:
         connection.execute("PRAGMA journal_mode=WAL")
         return connection
 
+    @contextmanager
+    def connection(self) -> Iterator[sqlite3.Connection]:
+        connection = self.connect()
+        try:
+            yield connection
+            connection.commit()
+        finally:
+            connection.close()
+
     def init_schema(self) -> None:
-        with self.connect() as connection:
+        with self.connection() as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS rates (
@@ -66,7 +77,7 @@ class SQLiteStore:
                 connection.execute(statement)
 
     def save_rates(self, rates: list[RateEdge]) -> None:
-        with self.connect() as connection:
+        with self.connection() as connection:
             connection.executemany(
                 """
                 INSERT INTO rates (
@@ -94,7 +105,7 @@ class SQLiteStore:
             )
 
     def save_opportunities(self, opportunities: list[Opportunity]) -> None:
-        with self.connect() as connection:
+        with self.connection() as connection:
             connection.executemany(
                 """
                 INSERT INTO opportunities (
@@ -132,7 +143,7 @@ class SQLiteStore:
             )
 
     def list_recent_opportunities(self, limit: int = 20) -> list[dict]:
-        with self.connect() as connection:
+        with self.connection() as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
                 """
@@ -157,7 +168,7 @@ class SQLiteStore:
         return [dict(row) for row in rows]
 
     def total_recorded_net_profit(self) -> float:
-        with self.connect() as connection:
+        with self.connection() as connection:
             value = connection.execute(
                 "SELECT COALESCE(SUM(net_profit), 0) FROM opportunities"
             ).fetchone()[0]
