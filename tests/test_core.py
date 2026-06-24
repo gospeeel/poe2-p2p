@@ -200,6 +200,7 @@ class UtilityTest(unittest.TestCase):
             export_opportunities_csv(profitable, csv_path)
             csv_text = csv_path.read_text(encoding="utf-8")
             self.assertIn("net_profit", csv_text)
+            self.assertIn("strategy_types", csv_text)
             self.assertIn("Exalted Orb -> Omen", csv_text)
 
             alerts = filter_profit_alerts(profitable, min_net_profit=100, min_roi_percent=2)
@@ -211,6 +212,7 @@ class UtilityTest(unittest.TestCase):
             store.save_opportunities(profitable)
             recent = store.list_recent_opportunities(1)
             self.assertEqual(len(recent), 1)
+            self.assertIn("basket", recent[0]["strategy_types"])
             self.assertAlmostEqual(store.total_recorded_net_profit(), 181.68)
 
             dashboard_path = root / "history.html"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import os
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QIcon, QPainter, QPixmap, QShortcut
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
     QSizeGrip,
     QSlider,
     QSpinBox,
+    QStyle,
     QSystemTrayIcon,
     QTabWidget,
     QTableWidget,
@@ -36,9 +38,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..calibration import save_region
-from ..capture import CaptureDependencyError, crop_image_file
+from ..calibration import load_region, save_region
+from ..capture import CaptureDependencyError, capture_screen_region, crop_image_file
 from ..config import DEFAULT_MARKET_RATIO_REGION, CropRegion
+from ..exporter import export_opportunities_csv
 from ..icon_cache import IconCache
 from ..logging_utils import LOG_DIR, LOG_FILE
 from ..global_hotkeys import GlobalHotkeyManager
@@ -50,7 +53,8 @@ from ..models import (
     Opportunity,
     StrategyType,
 )
-from ..ocr import detect_tesseract_cmd
+from ..ocr import OCRDependencyError, detect_tesseract_cmd, read_ratio_from_image
+from ..poe_ninja import fetch_currency_candidates
 from ..presets import STRATEGY_PRESETS
 from ..settings import ACTION_LABELS, AppSettings, find_hotkey_conflicts, load_settings, save_settings
 from ..storage import SQLiteStore
@@ -477,6 +481,10 @@ class OverlayWindow(QMainWindow):
         compact_button = self._button("Компактно", self.toggle_compact_mode)
         minimize_button = self._button("Скрыть", self.hide_to_tray)
         close_button = self._button("X", self.close)
+        settings_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
+        compact_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarShadeButton))
+        minimize_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarMinButton))
+        close_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarCloseButton))
         close_button.setObjectName("dangerButton")
 
         layout.addLayout(title_box, 1)
@@ -496,14 +504,15 @@ class OverlayWindow(QMainWindow):
         layout.setContentsMargins(8, 6, 8, 6)
 
         actions = [
-            ("Скан пары", self.scan_pair_placeholder, "Снять текущий Market Ratio из окна NPC Currency Exchange."),
-            ("Скан цепочки", self.scan_chain_placeholder, "Проверить несколько шагов связки, например Exalted -> Item -> Divine -> Exalted."),
-            ("Калибровка", self.open_calibration, "Настроить область экрана, из которой OCR читает Market Ratio."),
-            ("Кандидаты", self.refresh_candidates_placeholder, "Обновить список валют и предметов, которые стоит проверить первыми."),
-            ("Экспорт", self.export_placeholder, "Сохранить найденные возможности в CSV или отчет."),
+            ("Скан пары", self.scan_pair, QStyle.StandardPixmap.SP_BrowserReload, "Снять текущий Market Ratio из окна NPC Currency Exchange."),
+            ("Скан цепочки", self.scan_chain, QStyle.StandardPixmap.SP_ArrowForward, "Проверить несколько шагов связки, например Exalted -> Item -> Divine -> Exalted."),
+            ("Калибровка", self.open_calibration, QStyle.StandardPixmap.SP_FileDialogDetailedView, "Настроить область экрана, из которой OCR читает Market Ratio."),
+            ("Кандидаты", self.refresh_candidates, QStyle.StandardPixmap.SP_FileDialogContentsView, "Обновить список валют и предметов, которые стоит проверить первыми."),
+            ("Экспорт", self.export_opportunities, QStyle.StandardPixmap.SP_DialogSaveButton, "Сохранить найденные возможности в CSV или отчет."),
         ]
-        for label, callback, tip in actions:
+        for label, callback, icon, tip in actions:
             button = self._button(label, callback)
+            button.setIcon(self.style().standardIcon(icon))
             self._delayed_tip(button, tip)
             layout.addWidget(button)
         layout.addStretch(1)
@@ -819,9 +828,9 @@ class OverlayWindow(QMainWindow):
         self.hotkey_manager = GlobalHotkeyManager(
             self.settings.hotkeys,
             {
-                "scan_pair": lambda: QTimer.singleShot(0, self.scan_pair_placeholder),
+                "scan_pair": lambda: QTimer.singleShot(0, self.scan_pair),
                 "toggle_overlay": lambda: QTimer.singleShot(0, self.toggle_overlay_visibility),
-                "scan_candidates": lambda: QTimer.singleShot(0, self.refresh_candidates_placeholder),
+                "scan_candidates": lambda: QTimer.singleShot(0, self.refresh_candidates),
                 "pause_resume": lambda: QTimer.singleShot(0, self.toggle_pause),
             },
             lambda message: QTimer.singleShot(0, lambda: self.status_label.setText(message)),
@@ -997,18 +1006,104 @@ class OverlayWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(LOG_DIR.resolve())))
         self.status_label.setText(f"Папка логов: {LOG_DIR.resolve()}")
 
-    def scan_pair_placeholder(self) -> None:
-        self.show_error("Скан пары еще не подключен: нужен следующий этап снимка области игры + OCR.")
-        self.status_label.setText("Скан пары еще не подключен. Следующий этап: снимок области игры + OCR.")
+    def scan_pair(self) -> None:
+        self.clear_error()
+        self.status_label.setText("Скан пары: снимаю область Market Ratio.")
+        QApplication.processEvents()
 
-    def scan_chain_placeholder(self) -> None:
-        self.status_label.setText("Скан цепочки еще не подключен. Сейчас доступны расчетные примеры.")
+        region = self._load_scan_region()
+        temp_path = None
+        try:
+            with NamedTemporaryFile(prefix="poe2_p2p_ratio_", suffix=".png", delete=False) as file:
+                temp_path = Path(file.name)
+            capture_screen_region(region, temp_path)
+            result = read_ratio_from_image(temp_path)
+        except (CaptureDependencyError, OCRDependencyError, ValueError) as error:
+            self.show_error(f"Скан пары не выполнен: {error}")
+            self.status_label.setText("Скан пары завершился ошибкой. Проверь калибровку и Tesseract.")
+            return
+        finally:
+            if temp_path:
+                temp_path.unlink(missing_ok=True)
 
-    def refresh_candidates_placeholder(self) -> None:
-        self.status_label.setText("Кандидаты обновляются через poe.ninja в командной строке; подключение к UI будет следующим.")
+        left, right = result.ratio
+        text = (
+            "Последний скан Market Ratio\n\n"
+            f"Область: x={region.x}, y={region.y}, width={region.width}, height={region.height}\n"
+            f"OCR текст: {result.raw_text or 'пусто'}\n"
+            f"Распознанный курс: {left:g} : {right:g}\n"
+            f"Уверенность: {result.confidence:.2f}\n\n"
+            "Следующий этап: распознавать названия валют и поля количества, чтобы сразу строить курс и пересчитывать связки."
+        )
+        self.live_scan_view.setPlainText(text)
+        self.ocr_debug_view.setPlainText(text)
+        self.status_label.setText(f"Скан пары выполнен: {left:g} : {right:g}, уверенность {result.confidence:.2f}.")
 
-    def export_placeholder(self) -> None:
-        self.status_label.setText("Экспорт доступен через командную строку. Кнопка будет подключена к CSV следующим этапом.")
+    def scan_chain(self) -> None:
+        self.status_label.setText(
+            "Скан цепочки требует выбора нескольких пар. Сейчас используй Скан пары для каждого Market Ratio; пошаговый режим будет следующим этапом."
+        )
+
+    def refresh_candidates(self) -> None:
+        self.clear_error()
+        self.status_label.setText("Обновляю кандидатов через poe.ninja.")
+        QApplication.processEvents()
+        try:
+            candidates = fetch_currency_candidates(league=self.settings.league, limit=25)
+        except Exception as error:
+            self.show_error(f"Не удалось обновить кандидатов: {error}")
+            self.status_label.setText("Кандидаты не обновлены. Проверь сеть, league и доступность poe.ninja.")
+            return
+
+        if not candidates:
+            self.candidates_view.setPlainText("poe.ninja не вернул подходящих кандидатов.")
+            self.status_label.setText("Кандидаты не найдены.")
+            return
+
+        lines = [
+            "Кандидаты для проверки в NPC Currency Exchange",
+            "",
+            "Сначала проверяй верхние строки: у них выше сочетание объема, цены в Chaos и тренда.",
+            "",
+        ]
+        for index, candidate in enumerate(candidates, start=1):
+            lines.append(
+                f"{index}. {candidate.name} | Chaos {candidate.value_in_chaos:.2f} | "
+                f"объем/ч {candidate.volume_per_hour:.0f} | 7д {candidate.seven_day_change_percent:.1f}% | "
+                f"оценка {candidate.volume_score:.0f}"
+            )
+        self.candidates_view.setPlainText("\n".join(lines))
+        self.tabs.setCurrentWidget(self.candidates_view)
+        self.status_label.setText(f"Кандидаты обновлены: {len(candidates)} позиций.")
+
+    def export_opportunities(self) -> None:
+        rows = self.filtered_opportunities or self.opportunities
+        if not rows:
+            self.show_error("Нет связок для экспорта.")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить связки",
+            "poe2-p2p-opportunities.csv",
+            "CSV (*.csv)",
+        )
+        if not path:
+            self.status_label.setText("Экспорт отменен.")
+            return
+        try:
+            export_opportunities_csv(rows, path)
+        except OSError as error:
+            self.show_error(f"Не удалось сохранить CSV: {error}")
+            return
+        self.status_label.setText(f"Экспортировано связок: {len(rows)} -> {path}")
+
+    @staticmethod
+    def _load_scan_region() -> CropRegion:
+        calibration_path = Path("calibration.json")
+        if calibration_path.exists():
+            return load_region(calibration_path)
+        return DEFAULT_MARKET_RATIO_REGION
 
     def show_error(self, message: str) -> None:
         self.error_label.setText(message)

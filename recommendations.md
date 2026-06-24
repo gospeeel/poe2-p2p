@@ -197,13 +197,14 @@ dist/POE2-P2P/POE2-P2P.exe
 
 - [ ] Настоящие иконки валют в каждом узле маршрута, а не только текстовые бейджи `EX/DIV/IT`.
 - [ ] Компактная строка маршрута с иконками `Exalted -> Omen -> Divine -> Exalted` и раскрытием полного названия по tooltip.
-- [ ] Иконки на основных кнопках: scan, candidates, export, settings, minimize, close.
-- [ ] Подключить кнопку `Экспорт` к реальному CSV save dialog, а не placeholder.
-- [ ] Подключить кнопку `Кандидаты` к live poe.ninja/API списку внутри UI.
+- [x] Иконки на основных кнопках: scan, candidates, export, settings, minimize, close.
+- [x] Подключить кнопку `Экспорт` к реальному CSV save dialog, а не placeholder.
+- [x] Подключить кнопку `Кандидаты` к live poe.ninja/API списку внутри UI.
+- [x] Подключить `Скан пары` к live capture -> OCR внутри UI.
 - [ ] Подключить `Скан пары` к capture -> OCR -> расчету без CLI.
 - [ ] Подключить `Скан цепочки` к guided flow по нескольким NPC парам.
 - [ ] Сделать game-friendly compact mode: меньше текста, больше чисел/иконок, без горизонтальной перегрузки.
-- [ ] Добавить clear empty/loading/success states для каждой кнопки действия.
+- [x] Добавить clear empty/loading/success states для основных кнопок действия.
 - [ ] Добавить pin/unpin и click-through режим, если Windows overlay поверх POE2 позволит это безопасно.
 - [ ] Добавить настройку размера шрифта и масштаба таблицы под 1080p/1440p/4K.
 
