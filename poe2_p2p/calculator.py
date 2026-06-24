@@ -3,7 +3,10 @@ from __future__ import annotations
 from collections import defaultdict
 from math import prod
 
-from .models import Opportunity, RateEdge
+from .models import ChainType, Opportunity, RateEdge
+
+
+CORE_CURRENCIES = {"Exalted Orb", "Divine Orb", "Chaos Orb"}
 
 
 class ArbitrageCalculator:
@@ -132,6 +135,7 @@ class ArbitrageCalculator:
             profit_per_hour=profit_per_hour,
             score=score,
             risk=risk,
+            chain_type=self._classify_chain(path),
         )
 
     @staticmethod
@@ -141,3 +145,21 @@ class ArbitrageCalculator:
         if confidence >= 0.85 and roi_percent >= 1:
             return "medium"
         return "high"
+
+    @staticmethod
+    def _classify_chain(path: tuple[str, ...]) -> ChainType:
+        edges_count = max(len(path) - 1, 0)
+        unique_nodes = set(path[:-1])
+        if edges_count >= 5:
+            return ChainType.MULTI_HOP
+        if "Chaos Orb" in unique_nodes and unique_nodes.issubset(CORE_CURRENCIES):
+            return ChainType.CROSS_CURRENCY
+        if edges_count == 3 and path[0] == "Exalted Orb" and "Divine Orb" in unique_nodes:
+            return ChainType.DIRECT
+        if edges_count == 3 and path[0] == "Divine Orb" and "Exalted Orb" in unique_nodes:
+            return ChainType.REVERSE
+        if edges_count == 4:
+            return ChainType.TRIANGULAR
+        if "Chaos Orb" in unique_nodes:
+            return ChainType.CROSS_CURRENCY
+        return ChainType.UNKNOWN

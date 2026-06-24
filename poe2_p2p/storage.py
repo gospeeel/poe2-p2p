@@ -44,6 +44,7 @@ class SQLiteStore:
                 CREATE TABLE IF NOT EXISTS opportunities (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     path TEXT NOT NULL,
+                    chain_type TEXT DEFAULT 'unknown' NOT NULL,
                     input_currency TEXT NOT NULL,
                     input_amount REAL NOT NULL,
                     output_amount REAL NOT NULL,
@@ -71,6 +72,7 @@ class SQLiteStore:
             "profit_per_hour": "ALTER TABLE opportunities ADD COLUMN profit_per_hour REAL DEFAULT 0 NOT NULL",
             "score": "ALTER TABLE opportunities ADD COLUMN score REAL DEFAULT 0 NOT NULL",
             "risk": "ALTER TABLE opportunities ADD COLUMN risk TEXT DEFAULT 'unknown' NOT NULL",
+            "chain_type": "ALTER TABLE opportunities ADD COLUMN chain_type TEXT DEFAULT 'unknown' NOT NULL",
         }
         for column, statement in migrations.items():
             if column not in existing:
@@ -110,6 +112,7 @@ class SQLiteStore:
                 """
                 INSERT INTO opportunities (
                     path,
+                    chain_type,
                     input_currency,
                     input_amount,
                     output_amount,
@@ -121,11 +124,12 @@ class SQLiteStore:
                     score,
                     risk,
                     source
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
                         opportunity.path_label,
+                        opportunity.chain_type.value,
                         opportunity.input_currency,
                         opportunity.input_amount,
                         opportunity.output_amount,
@@ -149,6 +153,7 @@ class SQLiteStore:
                 """
                 SELECT
                     path,
+                    chain_type,
                     input_currency,
                     input_amount,
                     output_amount,

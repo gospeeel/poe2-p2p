@@ -137,49 +137,49 @@ dist/POE2-P2P/POE2-P2P.exe
 
 ### P0: базовая управляемость окна
 
-- [ ] Кнопка закрытия `X` в правом верхнем углу.
-- [ ] Кнопка свернуть/скрыть overlay.
-- [ ] Drag-to-move за верхнюю панель.
-- [ ] Resize grip или фиксированные compact/full размеры.
-- [ ] Видимый статус hotkeys в settings, но без перегруза основного окна.
-- [ ] Tray icon: show/hide, exit, settings.
-- [ ] Нормальное завершение приложения без Task Manager.
-- [ ] Настройка прозрачности overlay.
-- [ ] Переключатель `always on top`.
+- [x] Кнопка закрытия `X` в правом верхнем углу.
+- [x] Кнопка свернуть/скрыть overlay.
+- [x] Drag-to-move за верхнюю панель.
+- [x] Resize grip или фиксированные compact/full размеры.
+- [x] Видимый статус hotkeys в settings, но без перегруза основного окна.
+- [x] Tray icon: show/hide, exit, settings.
+- [x] Нормальное завершение приложения без Task Manager.
+- [x] Настройка прозрачности overlay.
+- [x] Переключатель `always on top`.
 
 ### P0: первый usable layout
 
-- [ ] Верхняя панель: app title, league/source status, last scan age, close/minimize/settings.
-- [ ] Action bar: `Scan Pair`, `Scan Chain`, `Refresh Candidates`, `Export`.
-- [ ] Таблица opportunities с колонками: icon path, path, input, output, net profit, ROI, profit/hour, confidence, age, risk.
-- [ ] Compact row mode для игры: меньше высота строк, скрываемые колонки.
-- [ ] Empty state: нет возможностей / нет live scan / OCR не настроен.
-- [ ] Error state: OCR failed, Tesseract missing, invalid crop, stale data.
-- [ ] Tooltip по каждой opportunity: источники курсов, формула profit, потери spread/rounding/gold/slippage.
+- [x] Верхняя панель: app title, league/source status, last scan age, close/minimize/settings.
+- [x] Action bar: `Scan Pair`, `Scan Chain`, `Refresh Candidates`, `Export`.
+- [x] Таблица opportunities с колонками: icon path, path, input, output, net profit, ROI, profit/hour, confidence, age, risk.
+- [x] Compact row mode для игры: меньше высота строк, скрываемые колонки.
+- [x] Empty state: нет возможностей / нет live scan / OCR не настроен.
+- [x] Error state: OCR failed, Tesseract missing, invalid crop, stale data.
+- [x] Tooltip по каждой opportunity: источники курсов, формула profit, потери spread/rounding/gold/slippage.
 
 ### P1: игровые иконки и визуальная читаемость
 
-- [ ] Currency/item icons в строках таблицы.
+- [x] Currency/item icons в строках таблицы, пока сгенерированные бейджи.
 - [ ] Локальный кеш иконок из poe.ninja/API.
-- [ ] Fallback icon для неизвестных items.
-- [ ] Цветовая кодировка: profit, risk, stale, low confidence.
-- [ ] Нормальное отображение длинных цепочек: `EX -> Omen -> DIV -> EX` + tooltip с full names.
-- [ ] User-friendly aliases: `Exalted`, `Divine`, `Chaos`, `Omen`.
-- [ ] Поддержка темной темы без монотонной серо-черной таблицы.
-- [ ] Не обрезать важные числа: profit/ROI должны быть видны без расширения окна.
+- [x] Fallback icon для неизвестных items.
+- [x] Цветовая кодировка: profit, risk, stale, low confidence.
+- [x] Нормальное отображение длинных цепочек: `EX -> Omen -> DIV -> EX` + tooltip с full names.
+- [x] User-friendly aliases: `Exalted`, `Divine`, `Chaos`, `Omen`.
+- [x] Поддержка темной темы без монотонной серо-черной таблицы.
+- [x] Не обрезать важные числа: profit/ROI должны быть видны без расширения окна.
 
 ### P1: фильтры и сортировка
 
-- [ ] Фильтр по base currency: Exalted, Divine, Chaos.
-- [ ] Фильтр по chain type: direct, reverse, triangular, cross-currency, multi-hop.
-- [ ] Фильтр `min ROI`.
-- [ ] Фильтр `min net profit`.
-- [ ] Фильтр `min profit/hour`.
-- [ ] Фильтр `min confidence`.
+- [x] Фильтр по base currency: Exalted, Divine, Chaos.
+- [x] Фильтр по chain type: direct, reverse, triangular, cross-currency, multi-hop.
+- [x] Фильтр `min ROI`.
+- [x] Фильтр `min net profit`.
+- [x] Фильтр `min profit/hour`.
+- [x] Фильтр `min confidence`.
 - [ ] Фильтр `max age`.
 - [ ] Фильтр `min volume/liquidity`.
-- [ ] Сортировка по profit, ROI, profit/hour, confidence, age, volume score.
-- [ ] Quick presets: safe / balanced / aggressive.
+- [x] Сортировка по profit, ROI, profit/hour, confidence.
+- [x] Quick presets: safe / balanced / aggressive.
 
 ### P1: hotkeys/binds
 
@@ -293,9 +293,9 @@ score =
 - [x] Chain 3: triangular arbitrage `Exalted -> Item A -> Divine -> Item B -> Exalted` как multi-edge cycle.
 - [x] Chain 4: cross-currency via chaos `Exalted -> Chaos -> Divine -> Exalted` как graph cycle.
 - [x] Chain 5: multi-hop `Exalted -> Item A -> Chaos -> Item B -> Divine -> Exalted` как graph cycle depth 5.
-- [ ] Явная классификация найденной цепочки по типу: direct/reverse/triangular/cross-currency/multi-hop.
-- [ ] Отдельный UI-фильтр по chain type.
-- [ ] Отдельные presets для каждого chain type.
+- [x] Явная классификация найденной цепочки по типу: direct/reverse/triangular/cross-currency/multi-hop.
+- [x] Отдельный UI-фильтр по chain type.
+- [x] Отдельные presets для каждого chain type.
 - [ ] Explain view: какая часть profit пришла из какого ребра.
 
 ### Дополнительные связки, которые стоит добавить
@@ -331,12 +331,12 @@ score =
 
 ### Следующий экономический milestone
 
-- [ ] Добавить `ChainType` enum.
-- [ ] Классифицировать opportunities после поиска цикла.
+- [x] Добавить `ChainType` enum.
+- [x] Классифицировать opportunities после поиска цикла.
 - [ ] Добавить `StrategyPreset`: safe, balanced, aggressive, high-volume, high-roi.
 - [ ] Выводить `max_size`, `age`, `volume_score`, `execution_steps`.
-- [ ] Добавить тестовые sample chains для Chain 1-5.
-- [ ] Добавить unit tests на классификацию и scoring.
+- [x] Добавить тестовые sample chains для Chain 1-5.
+- [x] Добавить unit tests на классификацию и scoring.
 
 ## OCR и данные
 

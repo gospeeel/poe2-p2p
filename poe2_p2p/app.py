@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"{preset.name}: base={preset.base_currency}, "
                 f"input={preset.input_amount:g}, min_roi={preset.min_roi_percent:g}, "
-                f"max_hops={preset.max_hops}"
+                f"max_hops={preset.max_hops}, chain_type={preset.chain_type.value}"
             )
         return 0
 

@@ -2,6 +2,26 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
+
+
+class ChainType(StrEnum):
+    DIRECT = "direct"
+    REVERSE = "reverse"
+    TRIANGULAR = "triangular"
+    CROSS_CURRENCY = "cross_currency"
+    MULTI_HOP = "multi_hop"
+    UNKNOWN = "unknown"
+
+
+CHAIN_TYPE_LABELS = {
+    ChainType.DIRECT: "прямая",
+    ChainType.REVERSE: "обратная",
+    ChainType.TRIANGULAR: "треугольная",
+    ChainType.CROSS_CURRENCY: "через Chaos",
+    ChainType.MULTI_HOP: "многошаговая",
+    ChainType.UNKNOWN: "неизвестно",
+}
 
 
 @dataclass(frozen=True)
@@ -33,6 +53,7 @@ class Opportunity:
     score: float = 0.0
     risk: str = "unknown"
     max_size: float | None = None
+    chain_type: ChainType = ChainType.UNKNOWN
 
     @property
     def path_label(self) -> str:

@@ -10,8 +10,9 @@ from poe2_p2p.candidates import parse_poe_ninja_currency_rows, shortlist_candida
 from poe2_p2p.config import CropRegion
 from poe2_p2p.dashboard import export_history_dashboard
 from poe2_p2p.exporter import export_opportunities_csv
-from poe2_p2p.models import RateEdge
+from poe2_p2p.models import ChainType, RateEdge
 from poe2_p2p.parser import normalize_ratio_to_edges, parse_ratio
+from poe2_p2p.presets import DEFAULT_PRESETS
 from poe2_p2p.ranking import rank_opportunities
 from poe2_p2p.sample_data import EXALTED
 from poe2_p2p.storage import SQLiteStore
@@ -48,6 +49,7 @@ class CalculatorTest(unittest.TestCase):
         self.assertAlmostEqual(opportunity.output_amount, 2231.68)
         self.assertAlmostEqual(opportunity.net_profit, 181.68)
         self.assertAlmostEqual(opportunity.roi_percent, 8.862439, places=5)
+        self.assertEqual(opportunity.chain_type, ChainType.DIRECT)
 
     def test_profit_adjustments_and_profit_per_hour(self):
         _, opportunities = build_sample_opportunities(
@@ -73,6 +75,38 @@ class CalculatorTest(unittest.TestCase):
         self.assertEqual(len(opportunities), 1)
         self.assertEqual(opportunities[0].path, ("A", "B", "C", "D", "A"))
         self.assertAlmostEqual(opportunities[0].net_profit, 6.0)
+
+    def test_chain_type_classification(self):
+        self.assertEqual(
+            ArbitrageCalculator._classify_chain(
+                ("Exalted Orb", "Omen", "Divine Orb", "Exalted Orb")
+            ),
+            ChainType.DIRECT,
+        )
+        self.assertEqual(
+            ArbitrageCalculator._classify_chain(
+                ("Divine Orb", "Omen", "Exalted Orb", "Divine Orb")
+            ),
+            ChainType.REVERSE,
+        )
+        self.assertEqual(
+            ArbitrageCalculator._classify_chain(
+                ("Exalted Orb", "Chaos Orb", "Divine Orb", "Exalted Orb")
+            ),
+            ChainType.CROSS_CURRENCY,
+        )
+        self.assertEqual(
+            ArbitrageCalculator._classify_chain(
+                ("Exalted Orb", "Item A", "Divine Orb", "Item B", "Exalted Orb")
+            ),
+            ChainType.TRIANGULAR,
+        )
+        self.assertEqual(
+            ArbitrageCalculator._classify_chain(
+                ("Exalted Orb", "Item A", "Chaos Orb", "Item B", "Divine Orb", "Exalted Orb")
+            ),
+            ChainType.MULTI_HOP,
+        )
 
 
 class UtilityTest(unittest.TestCase):
@@ -147,6 +181,14 @@ class UtilityTest(unittest.TestCase):
 
         failed = validate_ratio_range(observed_rate=2050, expected_rate=1000, tolerance_percent=5)
         self.assertFalse(failed.ok)
+
+    def test_strategy_presets_cover_chain_types(self):
+        covered = {preset.chain_type for preset in DEFAULT_PRESETS.values()}
+        self.assertIn(ChainType.DIRECT, covered)
+        self.assertIn(ChainType.REVERSE, covered)
+        self.assertIn(ChainType.CROSS_CURRENCY, covered)
+        self.assertIn(ChainType.TRIANGULAR, covered)
+        self.assertIn(ChainType.MULTI_HOP, covered)
 
 
 class ConfigTest(unittest.TestCase):
