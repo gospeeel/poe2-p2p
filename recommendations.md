@@ -131,6 +131,95 @@ dist/POE2-P2P/POE2-P2P.exe
 - [x] Сравнение profit/hour по стратегиям.
 - [x] Presets под разные лиги/режимы расчета.
 
+## UX/UI backlog
+
+Текущий overlay - технический прототип. Он подтверждает расчет и запуск, но не соответствует целевому UX в стиле POE Overlay 2. Его нужно развивать как отдельное приложение, а не просто таблицу.
+
+### P0: базовая управляемость окна
+
+- [ ] Кнопка закрытия `X` в правом верхнем углу.
+- [ ] Кнопка свернуть/скрыть overlay.
+- [ ] Drag-to-move за верхнюю панель.
+- [ ] Resize grip или фиксированные compact/full размеры.
+- [ ] Видимый статус hotkeys в settings, но без перегруза основного окна.
+- [ ] Tray icon: show/hide, exit, settings.
+- [ ] Нормальное завершение приложения без Task Manager.
+- [ ] Настройка прозрачности overlay.
+- [ ] Переключатель `always on top`.
+
+### P0: первый usable layout
+
+- [ ] Верхняя панель: app title, league/source status, last scan age, close/minimize/settings.
+- [ ] Action bar: `Scan Pair`, `Scan Chain`, `Refresh Candidates`, `Export`.
+- [ ] Таблица opportunities с колонками: icon path, path, input, output, net profit, ROI, profit/hour, confidence, age, risk.
+- [ ] Compact row mode для игры: меньше высота строк, скрываемые колонки.
+- [ ] Empty state: нет возможностей / нет live scan / OCR не настроен.
+- [ ] Error state: OCR failed, Tesseract missing, invalid crop, stale data.
+- [ ] Tooltip по каждой opportunity: источники курсов, формула profit, потери spread/rounding/gold/slippage.
+
+### P1: игровые иконки и визуальная читаемость
+
+- [ ] Currency/item icons в строках таблицы.
+- [ ] Локальный кеш иконок из poe.ninja/API.
+- [ ] Fallback icon для неизвестных items.
+- [ ] Цветовая кодировка: profit, risk, stale, low confidence.
+- [ ] Нормальное отображение длинных цепочек: `EX -> Omen -> DIV -> EX` + tooltip с full names.
+- [ ] User-friendly aliases: `Exalted`, `Divine`, `Chaos`, `Omen`.
+- [ ] Поддержка темной темы без монотонной серо-черной таблицы.
+- [ ] Не обрезать важные числа: profit/ROI должны быть видны без расширения окна.
+
+### P1: фильтры и сортировка
+
+- [ ] Фильтр по base currency: Exalted, Divine, Chaos.
+- [ ] Фильтр по chain type: direct, reverse, triangular, cross-currency, multi-hop.
+- [ ] Фильтр `min ROI`.
+- [ ] Фильтр `min net profit`.
+- [ ] Фильтр `min profit/hour`.
+- [ ] Фильтр `min confidence`.
+- [ ] Фильтр `max age`.
+- [ ] Фильтр `min volume/liquidity`.
+- [ ] Сортировка по profit, ROI, profit/hour, confidence, age, volume score.
+- [ ] Quick presets: safe / balanced / aggressive.
+
+### P1: hotkeys/binds
+
+- [ ] Global hotkey `Scan Pair`.
+- [ ] Global hotkey `Toggle Overlay`.
+- [ ] Global hotkey `Scan Candidate List`.
+- [ ] Global hotkey `Pause/Resume`.
+- [ ] Settings UI для изменения биндов.
+- [ ] Проверка конфликтов hotkeys.
+- [ ] Сохранение hotkeys в config.
+- [ ] Visual feedback после hotkey: scan started, scan success, scan failed.
+
+### P1: calibration UX
+
+- [ ] Calibration mode с выделением области `Market Ratio`.
+- [ ] Preview crop перед сохранением.
+- [ ] OCR preview: raw text, parsed ratio, confidence.
+- [ ] Кнопки `Retry`, `Accept`, `Adjust`.
+- [ ] Отдельные регионы для item names, ratio, amount fields, red current value.
+- [ ] Профили resolution/UI scale.
+
+### P2: рабочие views
+
+- [ ] `Opportunities` view.
+- [ ] `Live Scan` view.
+- [ ] `Candidates` view.
+- [ ] `History` view внутри приложения вместо только HTML export.
+- [ ] `Settings` view.
+- [ ] `Debug OCR` view для crop/preprocessing/recognized text.
+- [ ] `Economy Graph` view для диагностики цепочек.
+
+### P2: installer/user polish
+
+- [x] GitHub Release installer artifact.
+- [ ] App icon для `.exe`, installer и ярлыков.
+- [ ] Version display внутри приложения.
+- [ ] Auto-update check через GitHub Releases.
+- [ ] First-run wizard: Tesseract status, calibration, hotkeys, league.
+- [ ] Crash/error log file и кнопка открыть logs.
+
 ## Экономическая выгодность
 
 ### Что считать выгодной связкой
@@ -192,6 +281,62 @@ score =
 - пары с резким 7-day trend и большим volume.
 
 Низколиквидные предметы использовать осторожно: они часто дают высокий ROI на бумаге и плохой profit/hour в реальности.
+
+## Экономические связки и стратегии
+
+Текущий `ArbitrageCalculator` технически умеет искать циклы в directed graph глубиной до N ребер. Это покрывает прямые, треугольные и multi-hop цепочки как общий механизм, но не хватает стратегических presets, explainability, liquidity-aware scoring и UI-фильтров по типам цепочек.
+
+### Из исходной спецификации
+
+- [x] Chain 1: `Exalted -> Item -> Divine -> Exalted` через graph cycle.
+- [x] Chain 2: `Divine -> Item -> Exalted -> Divine` через graph cycle/preset.
+- [x] Chain 3: triangular arbitrage `Exalted -> Item A -> Divine -> Item B -> Exalted` как multi-edge cycle.
+- [x] Chain 4: cross-currency via chaos `Exalted -> Chaos -> Divine -> Exalted` как graph cycle.
+- [x] Chain 5: multi-hop `Exalted -> Item A -> Chaos -> Item B -> Divine -> Exalted` как graph cycle depth 5.
+- [ ] Явная классификация найденной цепочки по типу: direct/reverse/triangular/cross-currency/multi-hop.
+- [ ] Отдельный UI-фильтр по chain type.
+- [ ] Отдельные presets для каждого chain type.
+- [ ] Explain view: какая часть profit пришла из какого ребра.
+
+### Дополнительные связки, которые стоит добавить
+
+- [ ] Spread capture: `Currency A -> Currency B -> Currency A`, если NPC bid/ask на разных направлениях дает положительный цикл.
+- [ ] Stable hub arbitrage: `Exalted -> Chaos -> Item -> Exalted`.
+- [ ] Divine hub arbitrage: `Divine -> Chaos -> Item -> Divine`.
+- [ ] Omen/Rune basket arbitrage: несколько похожих items против одной базовой валюты.
+- [ ] Trend-confirmed flip: live profit + positive 7d trend + high volume.
+- [ ] Mean-reversion candidate: live NPC price сильно ниже poe.ninja baseline.
+- [ ] Liquidity-first route: не максимальный ROI, а максимальный `profit/hour` при большом volume.
+- [ ] Low-cap high-ROI route: отдельный risky режим для малых объемов.
+- [ ] Same-family swaps: rune -> rune, essence -> essence, omen -> omen через Divine/Exalted hub.
+- [ ] Currency triangle: `Exalted -> Chaos -> Divine -> Exalted`, `Divine -> Chaos -> Exalted -> Divine`.
+- [ ] Four-hop hub: `Exalted -> Item A -> Chaos -> Item B -> Exalted`.
+- [ ] Five-hop research: `Base -> Item A -> Hub 1 -> Item B -> Hub 2 -> Base`.
+
+### Экономические проверки, которых еще не хватает
+
+- [ ] Market depth / stock limit для каждого ребра.
+- [ ] Max executable size для всей цепочки.
+- [ ] Rounding loss по каждому шагу, а не только flat estimate.
+- [ ] Gold cost model по шагам.
+- [ ] Stale-data penalty.
+- [ ] OCR confidence penalty по конкретному ребру.
+- [ ] Liquidity factor из poe.ninja/API.
+- [ ] Trend factor из poe.ninja.
+- [ ] Execution time estimate: clicks/steps per cycle.
+- [ ] Profit/hour с учетом execution time, а не только `cycles_per_hour` вручную.
+- [ ] Kill-switch: скрывать цепочки с отрицательным net после всех потерь.
+- [ ] Minimum bankroll filter: сколько валюты нужно для meaningful cycle.
+- [ ] Risk labels: low/medium/high с понятной причиной.
+
+### Следующий экономический milestone
+
+- [ ] Добавить `ChainType` enum.
+- [ ] Классифицировать opportunities после поиска цикла.
+- [ ] Добавить `StrategyPreset`: safe, balanced, aggressive, high-volume, high-roi.
+- [ ] Выводить `max_size`, `age`, `volume_score`, `execution_steps`.
+- [ ] Добавить тестовые sample chains для Chain 1-5.
+- [ ] Добавить unit tests на классификацию и scoring.
 
 ## OCR и данные
 
