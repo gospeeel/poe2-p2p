@@ -4,3 +4,4 @@ mss>=9.0
 opencv-python>=4.8
 pytesseract>=0.3
 requests>=2.31
+keyboard>=0.13.5

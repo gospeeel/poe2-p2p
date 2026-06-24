@@ -10,9 +10,21 @@ def parse_poe_ninja_currency_rows(payload: dict) -> list[Candidate]:
         for item in payload.get("items", [])
         if isinstance(item, dict)
     }
+    item_images = {
+        item.get("id"): item.get("image")
+        for item in payload.get("items", [])
+        if isinstance(item, dict)
+    }
     item_names.update(
         {
             item.get("id"): item.get("name")
+            for item in payload.get("core", {}).get("items", [])
+            if isinstance(item, dict)
+        }
+    )
+    item_images.update(
+        {
+            item.get("id"): item.get("image")
             for item in payload.get("core", {}).get("items", [])
             if isinstance(item, dict)
         }
@@ -57,6 +69,7 @@ def parse_poe_ninja_currency_rows(payload: dict) -> list[Candidate]:
                 volume_per_hour=float(volume),
                 seven_day_change_percent=_parse_percent(trend),
                 popularity_rank=int(row.get("popularity_rank") or index),
+                image_url=_normalize_image_url(row.get("image") or item_images.get(row.get("id"))),
             )
         )
     return candidates
@@ -87,3 +100,13 @@ def _parse_percent(value) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _normalize_image_url(value: str | None) -> str | None:
+    if not value:
+        return None
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    if value.startswith("/"):
+        return f"https://poe.ninja{value}"
+    return value

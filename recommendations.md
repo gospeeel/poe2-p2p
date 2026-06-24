@@ -160,7 +160,7 @@ dist/POE2-P2P/POE2-P2P.exe
 ### P1: игровые иконки и визуальная читаемость
 
 - [x] Currency/item icons в строках таблицы, пока сгенерированные бейджи.
-- [ ] Локальный кеш иконок из poe.ninja/API.
+- [x] Локальный кеш иконок из poe.ninja/API.
 - [x] Fallback icon для неизвестных items.
 - [x] Цветовая кодировка: profit, risk, stale, low confidence.
 - [x] Нормальное отображение длинных цепочек: `EX -> Omen -> DIV -> EX` + tooltip с full names.
@@ -183,21 +183,21 @@ dist/POE2-P2P/POE2-P2P.exe
 
 ### P1: hotkeys/binds
 
-- [ ] Global hotkey `Scan Pair`.
-- [ ] Global hotkey `Toggle Overlay`.
-- [ ] Global hotkey `Scan Candidate List`.
-- [ ] Global hotkey `Pause/Resume`.
-- [ ] Settings UI для изменения биндов.
-- [ ] Проверка конфликтов hotkeys.
-- [ ] Сохранение hotkeys в config.
-- [ ] Visual feedback после hotkey: scan started, scan success, scan failed.
+- [x] Global hotkey `Scan Pair`.
+- [x] Global hotkey `Toggle Overlay`.
+- [x] Global hotkey `Scan Candidate List`.
+- [x] Global hotkey `Pause/Resume`.
+- [x] Settings UI для изменения биндов.
+- [x] Проверка конфликтов hotkeys.
+- [x] Сохранение hotkeys в config.
+- [x] Visual feedback после hotkey: scan started, scan success, scan failed.
 
 ### P1: calibration UX
 
 - [ ] Calibration mode с выделением области `Market Ratio`.
-- [ ] Preview crop перед сохранением.
-- [ ] OCR preview: raw text, parsed ratio, confidence.
-- [ ] Кнопки `Retry`, `Accept`, `Adjust`.
+- [x] Preview crop перед сохранением.
+- [x] OCR preview: raw text, parsed ratio, confidence.
+- [x] Кнопки `Retry`, `Accept`, `Adjust`.
 - [ ] Отдельные регионы для item names, ratio, amount fields, red current value.
 - [ ] Профили resolution/UI scale.
 
@@ -207,7 +207,7 @@ dist/POE2-P2P/POE2-P2P.exe
 - [ ] `Live Scan` view.
 - [ ] `Candidates` view.
 - [ ] `History` view внутри приложения вместо только HTML export.
-- [ ] `Settings` view.
+- [x] `Settings` view.
 - [ ] `Debug OCR` view для crop/preprocessing/recognized text.
 - [ ] `Economy Graph` view для диагностики цепочек.
 

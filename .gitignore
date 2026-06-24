@@ -6,6 +6,10 @@ venv/
 build/
 dist/
 installer_output/
+icon_cache/
+settings.json
+calibration.json
+_calibration_preview.png
 *.db
 *.sqlite
 *.sqlite3

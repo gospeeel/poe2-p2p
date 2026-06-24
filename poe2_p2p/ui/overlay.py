@@ -9,6 +9,10 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -16,8 +20,10 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QPushButton,
+    QLineEdit,
     QSizeGrip,
     QSlider,
+    QSpinBox,
     QSystemTrayIcon,
     QTableWidget,
     QTableWidgetItem,
@@ -26,7 +32,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..calibration import save_region
+from ..capture import CaptureDependencyError, crop_image_file
+from ..config import DEFAULT_MARKET_RATIO_REGION, CropRegion
+from ..icon_cache import IconCache
+from ..global_hotkeys import GlobalHotkeyManager
 from ..models import CHAIN_TYPE_LABELS, ChainType, Opportunity
+from ..settings import ACTION_LABELS, AppSettings, find_hotkey_conflicts, load_settings, save_settings
 
 
 ALIASES = {
@@ -152,12 +164,176 @@ class TitleBar(QFrame):
         event.accept()
 
 
+class SettingsDialog(QDialog):
+    def __init__(self, settings: AppSettings, parent=None) -> None:
+        super().__init__(parent)
+        self.settings = settings
+        self.setWindowTitle("Настройки")
+        self.setMinimumWidth(420)
+        layout = QVBoxLayout(self)
+
+        hint = QLabel("Бинды сохраняются локально. Глобальная обработка поверх игры будет подключена следующим этапом.")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        form = QFormLayout()
+        self.hotkey_inputs: dict[str, QLineEdit] = {}
+        for action, label in ACTION_LABELS.items():
+            edit = QLineEdit(settings.hotkeys.get(action, ""))
+            edit.setPlaceholderText("Например Ctrl+1")
+            self.hotkey_inputs[action] = edit
+            form.addRow(label, edit)
+        layout.addLayout(form)
+
+        self.conflict_label = QLabel("")
+        self.conflict_label.setObjectName("error")
+        self.conflict_label.hide()
+        layout.addWidget(self.conflict_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Сохранить")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Отмена")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def accept(self) -> None:
+        hotkeys = {action: edit.text().strip() for action, edit in self.hotkey_inputs.items()}
+        conflicts = find_hotkey_conflicts(hotkeys)
+        if conflicts:
+            values = ", ".join(conflicts)
+            self.conflict_label.setText(f"Конфликт биндов: {values}")
+            self.conflict_label.show()
+            return
+        self.settings.hotkeys = hotkeys
+        super().accept()
+
+
+class CalibrationDialog(QDialog):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Калибровка OCR")
+        self.setMinimumWidth(560)
+        self.region = DEFAULT_MARKET_RATIO_REGION
+        layout = QVBoxLayout(self)
+
+        hint = QLabel(
+            "Укажи область с Market Ratio. Нажми `Проверить`, чтобы увидеть crop, "
+            "и `OCR`, чтобы проверить распознавание."
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        file_row = QHBoxLayout()
+        self.image_path = QLineEdit("Screenshot_1.jpg")
+        browse = QPushButton("Файл")
+        browse.clicked.connect(self.choose_file)
+        file_row.addWidget(QLabel("Скриншот"))
+        file_row.addWidget(self.image_path, 1)
+        file_row.addWidget(browse)
+        layout.addLayout(file_row)
+
+        form = QFormLayout()
+        self.x_input = self._spin(self.region.x)
+        self.y_input = self._spin(self.region.y)
+        self.width_input = self._spin(self.region.width)
+        self.height_input = self._spin(self.region.height)
+        form.addRow("X", self.x_input)
+        form.addRow("Y", self.y_input)
+        form.addRow("Ширина", self.width_input)
+        form.addRow("Высота", self.height_input)
+        layout.addLayout(form)
+
+        self.preview = QLabel("Предпросмотр появится после проверки.")
+        self.preview.setObjectName("empty")
+        self.preview.setMinimumHeight(72)
+        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.preview)
+
+        self.result = QLabel("")
+        self.result.setWordWrap(True)
+        layout.addWidget(self.result)
+
+        actions = QHBoxLayout()
+        preview_button = QPushButton("Проверить")
+        preview_button.clicked.connect(self.update_preview)
+        ocr_button = QPushButton("OCR")
+        ocr_button.clicked.connect(self.run_ocr)
+        accept_button = QPushButton("Принять")
+        accept_button.clicked.connect(self.accept)
+        cancel_button = QPushButton("Отмена")
+        cancel_button.clicked.connect(self.reject)
+        for button in [preview_button, ocr_button, accept_button, cancel_button]:
+            actions.addWidget(button)
+        layout.addLayout(actions)
+
+    def choose_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Выбери скриншот",
+            "",
+            "Изображения (*.png *.jpg *.jpeg *.webp)",
+        )
+        if path:
+            self.image_path.setText(path)
+
+    def update_preview(self) -> None:
+        region = self._region_from_inputs()
+        output = "_calibration_preview.png"
+        try:
+            crop_image_file(self.image_path.text(), region, output)
+        except (CaptureDependencyError, ValueError, FileNotFoundError) as error:
+            self.result.setText(f"Не удалось сделать crop: {error}")
+            return
+        pixmap = QPixmap(output)
+        self.preview.setPixmap(pixmap.scaled(260, 80, Qt.AspectRatioMode.KeepAspectRatio))
+        self.result.setText(f"Область: {region.x},{region.y},{region.width},{region.height}")
+
+    def run_ocr(self) -> None:
+        self.update_preview()
+        try:
+            from ..ocr import OCRDependencyError, read_ratio_from_image
+
+            result = read_ratio_from_image("_calibration_preview.png")
+        except (OCRDependencyError, ValueError, FileNotFoundError) as error:
+            self.result.setText(f"OCR не сработал: {error}")
+            return
+        left, right = result.ratio
+        self.result.setText(
+            f"Распознано: {result.raw_text}\n"
+            f"Курс: {left:g} : {right:g}\n"
+            f"Уверенность: {result.confidence:.2f}"
+        )
+
+    def accept(self) -> None:
+        save_region("calibration.json", self._region_from_inputs())
+        super().accept()
+
+    def _region_from_inputs(self) -> CropRegion:
+        return CropRegion(
+            x=self.x_input.value(),
+            y=self.y_input.value(),
+            width=self.width_input.value(),
+            height=self.height_input.value(),
+        )
+
+    @staticmethod
+    def _spin(value: int) -> QSpinBox:
+        spin = QSpinBox()
+        spin.setRange(0, 10000)
+        spin.setValue(value)
+        return spin
+
+
 class OverlayWindow(QMainWindow):
     def __init__(self, opportunities: list[Opportunity]) -> None:
         super().__init__()
         self.opportunities = [item for item in opportunities if item.net_profit > 0]
         self.filtered_opportunities: list[Opportunity] = []
         self.compact_mode = False
+        self.settings = load_settings()
+        self.icon_cache = IconCache()
+        self.paused = False
         self.tooltip_filter = DelayedToolTipFilter()
         self.setWindowTitle("POE2 P2P")
         self.setWindowFlags(
@@ -168,7 +344,7 @@ class OverlayWindow(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setMinimumSize(760, 260)
         self.resize(1120, 420)
-        self.setWindowOpacity(0.94)
+        self.setWindowOpacity(self.settings.opacity / 100)
 
         self.root = QWidget()
         self.root.setObjectName("root")
@@ -185,6 +361,7 @@ class OverlayWindow(QMainWindow):
         self._build_footer()
         self._build_tray()
         self._install_shortcuts()
+        self._install_global_hotkeys()
         self._apply_style()
         self.apply_filters()
 
@@ -209,7 +386,7 @@ class OverlayWindow(QMainWindow):
         title_box.addWidget(subtitle)
 
         self.always_on_top = QCheckBox("Поверх игры")
-        self.always_on_top.setChecked(True)
+        self.always_on_top.setChecked(self.settings.always_on_top)
         self.always_on_top.stateChanged.connect(self.toggle_always_on_top)
         self._delayed_tip(
             self.always_on_top,
@@ -219,12 +396,12 @@ class OverlayWindow(QMainWindow):
 
         self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self.opacity_slider.setRange(70, 100)
-        self.opacity_slider.setValue(94)
+        self.opacity_slider.setValue(self.settings.opacity)
         self.opacity_slider.setFixedWidth(110)
-        self.opacity_slider.valueChanged.connect(lambda value: self.setWindowOpacity(value / 100))
+        self.opacity_slider.valueChanged.connect(self.update_opacity)
         self._delayed_tip(self.opacity_slider, "Прозрачность окна: 70-100%.")
 
-        settings_button = self._button("Настройки", self.show_settings_placeholder)
+        settings_button = self._button("Настройки", self.open_settings)
         compact_button = self._button("Компактно", self.toggle_compact_mode)
         minimize_button = self._button("Скрыть", self.hide_to_tray)
         close_button = self._button("X", self.close)
@@ -249,6 +426,7 @@ class OverlayWindow(QMainWindow):
         actions = [
             ("Скан пары", self.scan_pair_placeholder, "Снять текущий Market Ratio из окна NPC Currency Exchange."),
             ("Скан цепочки", self.scan_chain_placeholder, "Проверить несколько шагов связки, например Exalted -> Item -> Divine -> Exalted."),
+            ("Калибровка", self.open_calibration, "Настроить область экрана, из которой OCR читает Market Ratio."),
             ("Кандидаты", self.refresh_candidates_placeholder, "Обновить список валют и items, которые стоит проверить первыми."),
             ("Экспорт", self.export_placeholder, "Сохранить найденные возможности в CSV или отчет."),
         ]
@@ -394,6 +572,7 @@ class OverlayWindow(QMainWindow):
         footer = QHBoxLayout()
         self.hotkeys_label = QLabel("Бинды: Esc - закрыть | Ctrl+R - обновить | Ctrl+H - скрыть | Ctrl+M - компактно")
         self.hotkeys_label.setObjectName("footer")
+        self._refresh_hotkeys_label()
         self._delayed_tip(
             self.hotkeys_label,
             "Это локальные бинды активного окна. Глобальные бинды поверх игры будут добавлены отдельно.",
@@ -426,6 +605,19 @@ class OverlayWindow(QMainWindow):
         QShortcut("Ctrl+R", self, activated=self.apply_filters)
         QShortcut("Ctrl+H", self, activated=self.hide_to_tray)
         QShortcut("Ctrl+M", self, activated=self.toggle_compact_mode)
+
+    def _install_global_hotkeys(self) -> None:
+        self.hotkey_manager = GlobalHotkeyManager(
+            self.settings.hotkeys,
+            {
+                "scan_pair": lambda: QTimer.singleShot(0, self.scan_pair_placeholder),
+                "toggle_overlay": lambda: QTimer.singleShot(0, self.toggle_overlay_visibility),
+                "scan_candidates": lambda: QTimer.singleShot(0, self.refresh_candidates_placeholder),
+                "pause_resume": lambda: QTimer.singleShot(0, self.toggle_pause),
+            },
+            lambda message: QTimer.singleShot(0, lambda: self.status_label.setText(message)),
+        )
+        self.hotkey_manager.start()
 
     def apply_filters(self) -> None:
         visible = []
@@ -515,6 +707,8 @@ class OverlayWindow(QMainWindow):
         self.status_label.setText("Компактный режим включен." if self.compact_mode else "Полный режим включен.")
 
     def toggle_always_on_top(self) -> None:
+        self.settings.always_on_top = self.always_on_top.isChecked()
+        save_settings(self.settings)
         flags = self.windowFlags()
         if self.always_on_top.isChecked():
             flags |= Qt.WindowType.WindowStaysOnTopHint
@@ -523,13 +717,41 @@ class OverlayWindow(QMainWindow):
         self.setWindowFlags(flags)
         self.show()
 
+    def update_opacity(self, value: int) -> None:
+        self.settings.opacity = value
+        self.setWindowOpacity(value / 100)
+        save_settings(self.settings)
+
     def hide_to_tray(self) -> None:
         self.hide()
         if self.tray.isVisible():
             self.tray.showMessage("POE2 P2P", "Overlay скрыт. Вернуть можно через значок в трее.")
 
-    def show_settings_placeholder(self) -> None:
-        self.status_label.setText("Настройки будут добавлены следующим этапом: бинды, фильтры, OCR и тема.")
+    def toggle_overlay_visibility(self) -> None:
+        if self.isVisible():
+            self.hide_to_tray()
+        else:
+            self.showNormal()
+            self.status_label.setText("Окно показано через бинд.")
+
+    def toggle_pause(self) -> None:
+        self.paused = not self.paused
+        self.status_label.setText("Пауза включена." if self.paused else "Пауза выключена.")
+
+    def open_settings(self) -> None:
+        dialog = SettingsDialog(self.settings, self)
+        dialog.setStyleSheet(self.styleSheet())
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            save_settings(self.settings)
+            self.status_label.setText("Настройки сохранены.")
+            self._refresh_hotkeys_label()
+            self.hotkey_manager.restart(self.settings.hotkeys)
+
+    def open_calibration(self) -> None:
+        dialog = CalibrationDialog(self)
+        dialog.setStyleSheet(self.styleSheet())
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.status_label.setText("Калибровка сохранена в calibration.json.")
 
     def scan_pair_placeholder(self) -> None:
         self.show_error("Скан пары еще не подключен: нужен следующий этап снимка области игры + OCR.")
@@ -555,6 +777,16 @@ class OverlayWindow(QMainWindow):
     def _tray_activated(self, reason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.showNormal() if self.isHidden() else self.hide()
+
+    def _refresh_hotkeys_label(self) -> None:
+        parts = [f"{ACTION_LABELS[action]}: {value}" for action, value in self.settings.hotkeys.items()]
+        self.hotkeys_label.setText("Бинды: " + " | ".join(parts))
+
+    def closeEvent(self, event) -> None:  # noqa: N802
+        self.hotkey_manager.stop()
+        if hasattr(self, "tray"):
+            self.tray.hide()
+        super().closeEvent(event)
 
     def _button(self, text: str, callback) -> QPushButton:
         button = QPushButton(text)
@@ -582,6 +814,9 @@ class OverlayWindow(QMainWindow):
         return " ".join(icons)
 
     def _icon_for_currency(self, name: str) -> QIcon:
+        cached = self.icon_cache.cached_icon_path(name)
+        if cached:
+            return QIcon(str(cached))
         color, text = ICON_COLORS.get(name, ("#6f7b88", "IT"))
         pixmap = QPixmap(28, 28)
         pixmap.fill(Qt.GlobalColor.transparent)

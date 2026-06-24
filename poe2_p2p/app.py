@@ -9,6 +9,7 @@ from .calibration import load_region, save_region
 from .config import DEFAULT_MARKET_RATIO_REGION, CropRegion
 from .dashboard import export_history_dashboard
 from .exporter import export_opportunities_csv
+from .icon_cache import cache_poe_ninja_icons
 from .parser import parse_ratio
 from .poe_ninja import fetch_currency_candidates
 from .presets import DEFAULT_PRESETS, get_preset
@@ -119,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--poe-ninja-url", default=None, help="Override poe.ninja currency URL")
     parser.add_argument("--poe-ninja-league", default=None, help="Override poe.ninja POE2 league")
     parser.add_argument("--candidate-limit", type=int, default=25)
+    parser.add_argument("--cache-icons", action="store_true", help="Download poe.ninja icons into local cache")
+    parser.add_argument("--icon-cache-dir", default="icon_cache")
     parser.add_argument("--min-volume", type=float, default=0.0)
     parser.add_argument("--validate-rate", type=float, default=None, help="Observed rate to validate")
     parser.add_argument("--expected-rate", type=float, default=None, help="Expected rate for --validate-rate")
@@ -166,6 +169,15 @@ def main(argv: list[str] | None = None) -> int:
                 f"7d={candidate.seven_day_change_percent:g}% | "
                 f"score={candidate.volume_score:g}"
             )
+        return 0
+
+    if args.cache_icons:
+        count = cache_poe_ninja_icons(
+            cache_dir=args.icon_cache_dir,
+            league=args.poe_ninja_league,
+            limit=args.candidate_limit,
+        )
+        print(f"Загружено новых иконок: {count}")
         return 0
 
     if args.validate_rate is not None:

@@ -211,6 +211,12 @@ python3 -m poe2_p2p --history 10
 python3 -m poe2_p2p --history-dashboard history.html
 ```
 
+Cache icons from poe.ninja:
+
+```bash
+python3 -m poe2_p2p --cache-icons --candidate-limit 100
+```
+
 ## Build Windows exe
 
 On Windows PowerShell:

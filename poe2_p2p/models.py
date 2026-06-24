@@ -67,6 +67,7 @@ class Candidate:
     volume_per_hour: float
     seven_day_change_percent: float = 0.0
     popularity_rank: int | None = None
+    image_url: str | None = None
 
     @property
     def volume_score(self) -> float:

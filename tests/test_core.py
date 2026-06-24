@@ -10,11 +10,13 @@ from poe2_p2p.candidates import parse_poe_ninja_currency_rows, shortlist_candida
 from poe2_p2p.config import CropRegion
 from poe2_p2p.dashboard import export_history_dashboard
 from poe2_p2p.exporter import export_opportunities_csv
+from poe2_p2p.icon_cache import IconCache
 from poe2_p2p.models import ChainType, RateEdge
 from poe2_p2p.parser import normalize_ratio_to_edges, parse_ratio
 from poe2_p2p.presets import DEFAULT_PRESETS
 from poe2_p2p.ranking import rank_opportunities
 from poe2_p2p.sample_data import EXALTED
+from poe2_p2p.settings import AppSettings, find_hotkey_conflicts, load_settings, save_settings
 from poe2_p2p.storage import SQLiteStore
 from poe2_p2p.validation import validate_ratio_range
 
@@ -157,7 +159,7 @@ class UtilityTest(unittest.TestCase):
             self.assertEqual([candidate.name for candidate in shortlist], ["B", "A"])
 
             new_payload = {
-                "core": {"items": [{"id": "divine", "name": "Divine Orb"}]},
+                "core": {"items": [{"id": "divine", "name": "Divine Orb", "image": "/image/divine.png"}]},
                 "lines": [
                     {
                         "id": "divine",
@@ -170,6 +172,7 @@ class UtilityTest(unittest.TestCase):
             parsed = parse_poe_ninja_currency_rows(new_payload)
             self.assertEqual(parsed[0].name, "Divine Orb")
             self.assertEqual(parsed[0].volume_per_hour, 123.0)
+            self.assertEqual(parsed[0].image_url, "https://poe.ninja/image/divine.png")
 
     def test_ranking_and_ratio_validation(self):
         _, opportunities = build_sample_opportunities(cycles_per_hour=4)
@@ -189,6 +192,35 @@ class UtilityTest(unittest.TestCase):
         self.assertIn(ChainType.CROSS_CURRENCY, covered)
         self.assertIn(ChainType.TRIANGULAR, covered)
         self.assertIn(ChainType.MULTI_HOP, covered)
+
+    def test_icon_cache_reads_local_index(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            icon_path = root / "divine.png"
+            icon_path.write_bytes(b"fake")
+            (root / "index.json").write_text('{"Divine Orb": "divine.png"}', encoding="utf-8")
+
+            cache = IconCache(root)
+            self.assertEqual(cache.cached_icon_path("Divine Orb"), icon_path)
+            self.assertIsNone(cache.cached_icon_path("Unknown"))
+
+    def test_settings_save_load_and_conflicts(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            settings = AppSettings()
+            settings.hotkeys["scan_pair"] = "Ctrl+1"
+            settings.hotkeys["toggle_overlay"] = "Ctrl+H"
+            settings.opacity = 88
+            save_settings(settings, path)
+
+            loaded = load_settings(path)
+            self.assertEqual(loaded.opacity, 88)
+            self.assertEqual(loaded.hotkeys["scan_pair"], "Ctrl+1")
+
+            conflicts = find_hotkey_conflicts(
+                {"scan_pair": "Ctrl+1", "toggle_overlay": "ctrl+1", "pause_resume": "Ctrl+P"}
+            )
+            self.assertIn("ctrl+1", conflicts)
 
 
 class ConfigTest(unittest.TestCase):
