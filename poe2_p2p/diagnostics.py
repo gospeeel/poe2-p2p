@@ -25,6 +25,7 @@ class DiagnosticCheck:
 class DiagnosticReport:
     checks: tuple[DiagnosticCheck, ...]
     report_path: Path
+    live_capture_requested: bool = False
 
     @property
     def ok(self) -> bool:
@@ -49,6 +50,14 @@ class DiagnosticReport:
         lines.extend(
             [
                 "",
+                "## Статус оставшихся TODO",
+                "",
+                *self._validation_lines(),
+            ]
+        )
+        lines.extend(
+            [
+                "",
                 "## Что отправить разработчику",
                 "",
                 "1. Этот файл отчета.",
@@ -57,6 +66,33 @@ class DiagnosticReport:
             ]
         )
         return "\n".join(lines)
+
+    def _validation_lines(self) -> list[str]:
+        windows = platform.system().lower() == "windows"
+        packaged = bool(getattr(sys, "frozen", False))
+        dependencies_ok = _check_named(self.checks, "Зависимости Python")
+        calibration_ok = _check_named(self.checks, "Калибровка")
+        live_screenshot_ok = _check_named(self.checks, "Живой снимок")
+        live_ocr_ok = _check_named(self.checks, "Живое распознавание Market Ratio")
+
+        return [
+            _todo_line(
+                "Проверить запуск на чистой Windows-машине",
+                windows and packaged,
+                "запусти установленный POE2-P2P.exe и приложи этот отчет",
+            ),
+            _todo_line(
+                "Проверка overlay на Windows",
+                windows and dependencies_ok,
+                "окно должно открыться, скрываться в трей и закрываться без диспетчера задач",
+            ),
+            _todo_line(
+                "OCR курса на живом снимке",
+                self.live_capture_requested and calibration_ok and live_screenshot_ok and live_ocr_ok,
+                "открой NPC Currency Exchange, сохрани калибровку Market Ratio и запусти диагностику с живым снимком",
+            ),
+            "- Требует ручного подтверждения: проверка NPC в игре - сравни распознанный Market Ratio с тем, что видно в игре, и проверь расчет в таблице.",
+        ]
 
 
 def run_diagnostics(
@@ -73,7 +109,11 @@ def run_diagnostics(
         checks.extend(_check_live_capture())
 
     path = Path(report_path) if report_path else _default_report_path()
-    report = DiagnosticReport(checks=tuple(checks), report_path=path)
+    report = DiagnosticReport(
+        checks=tuple(checks),
+        report_path=path,
+        live_capture_requested=live_capture,
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(report.text, encoding="utf-8")
     return report
@@ -193,3 +233,12 @@ def _check_live_capture() -> list[DiagnosticCheck]:
 def _default_report_path() -> Path:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return LOG_DIR / f"diagnostics-{stamp}.md"
+
+
+def _check_named(checks: tuple[DiagnosticCheck, ...], name: str) -> bool:
+    return any(check.name == name and check.ok for check in checks)
+
+
+def _todo_line(name: str, ok: bool, hint: str) -> str:
+    status = "можно закрыть" if ok else "нужно проверить"
+    return f"- {status}: {name} - {hint}."

@@ -393,6 +393,8 @@ class UtilityTest(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             self.assertIn("Диагностика POE2 P2P", text)
             self.assertIn("Tesseract OCR", text)
+            self.assertIn("Статус оставшихся TODO", text)
+            self.assertIn("проверка NPC в игре", text)
             self.assertEqual(report.report_path, path)
 
 

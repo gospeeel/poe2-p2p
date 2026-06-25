@@ -52,6 +52,7 @@ Launch POE2 P2P from Start Menu or Desktop shortcut
 - возможность записи логов;
 - живой снимок области `Market Ratio`;
 - OCR живого снимка, если область калибровки настроена.
+- статус оставшихся TODO, которые можно закрыть после Windows/live проверки.
 
 То же самое можно запустить из PowerShell:
 
@@ -64,6 +65,12 @@ Launch POE2 P2P from Start Menu or Desktop shortcut
 ```powershell
 .\POE2-P2P.exe --diagnostics
 ```
+
+Для проверки NPC в игре дополнительно сравни глазами:
+
+- текст `Market Ratio` в игре;
+- строку `Живое распознавание Market Ratio` в отчете;
+- итоговую связку и профит в таблице приложения.
 
 Developer/manual setup after copying the project folder to a Windows PC:
 
