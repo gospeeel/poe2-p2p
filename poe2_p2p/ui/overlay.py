@@ -38,7 +38,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..calibration import load_region, save_region
+from ..calibration import (
+    MARKET_RATIO,
+    REGION_LABELS,
+    default_calibration_profile,
+    load_calibration_profile,
+    load_region,
+    save_calibration_profile,
+)
 from ..capture import CaptureDependencyError, capture_screen_region, crop_image_file
 from ..config import DEFAULT_MARKET_RATIO_REGION, CropRegion
 from ..exporter import export_opportunities_csv
@@ -247,15 +254,36 @@ class CalibrationDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Калибровка OCR")
         self.setMinimumWidth(560)
-        self.region = DEFAULT_MARKET_RATIO_REGION
+        self.calibration_path = Path("calibration.json")
+        self.profile = (
+            load_calibration_profile(self.calibration_path)
+            if self.calibration_path.exists()
+            else default_calibration_profile()
+        )
+        self.current_region_key = MARKET_RATIO
+        self.region = self.profile.regions[MARKET_RATIO]
         layout = QVBoxLayout(self)
 
         hint = QLabel(
-            "Укажи область с Market Ratio. Нажми `Проверить`, чтобы увидеть crop, "
-            "и `OCR`, чтобы проверить распознавание."
+            "Укажи области NPC Currency Exchange. Нажми `Проверить`, чтобы увидеть crop, "
+            "и `OCR`, чтобы проверить распознавание Market Ratio."
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
+
+        profile_form = QFormLayout()
+        self.profile_name = QLineEdit(self.profile.name)
+        self.resolution_width = self._spin(self.profile.resolution_width)
+        self.resolution_height = self._spin(self.profile.resolution_height)
+        self.profile_scale = QSpinBox()
+        self.profile_scale.setRange(50, 200)
+        self.profile_scale.setSuffix("%")
+        self.profile_scale.setValue(self.profile.ui_scale_percent)
+        profile_form.addRow("Профиль", self.profile_name)
+        profile_form.addRow("Ширина экрана", self.resolution_width)
+        profile_form.addRow("Высота экрана", self.resolution_height)
+        profile_form.addRow("Масштаб UI игры", self.profile_scale)
+        layout.addLayout(profile_form)
 
         file_row = QHBoxLayout()
         self.image_path = QLineEdit("Screenshot_1.jpg")
@@ -267,6 +295,11 @@ class CalibrationDialog(QDialog):
         layout.addLayout(file_row)
 
         form = QFormLayout()
+        self.region_selector = QComboBox()
+        for key, label in REGION_LABELS.items():
+            self.region_selector.addItem(label, key)
+        self.region_selector.currentIndexChanged.connect(self.change_region)
+        form.addRow("Область", self.region_selector)
         self.x_input = self._spin(self.region.x)
         self.y_input = self._spin(self.region.y)
         self.width_input = self._spin(self.region.width)
@@ -339,8 +372,28 @@ class CalibrationDialog(QDialog):
         )
 
     def accept(self) -> None:
-        save_region("calibration.json", self._region_from_inputs())
+        self._store_current_region()
+        self.profile.name = self.profile_name.text().strip() or "Основной"
+        self.profile.resolution_width = self.resolution_width.value()
+        self.profile.resolution_height = self.resolution_height.value()
+        self.profile.ui_scale_percent = self.profile_scale.value()
+        save_calibration_profile(self.calibration_path, self.profile)
         super().accept()
+
+    def change_region(self) -> None:
+        self._store_current_region()
+        key = self.region_selector.currentData()
+        self.current_region_key = str(key)
+        region = self.profile.regions.get(self.current_region_key, DEFAULT_MARKET_RATIO_REGION)
+        self.x_input.setValue(region.x)
+        self.y_input.setValue(region.y)
+        self.width_input.setValue(region.width)
+        self.height_input.setValue(region.height)
+        self.result.setText(f"Выбрана область: {REGION_LABELS.get(self.current_region_key, self.current_region_key)}")
+
+    def _store_current_region(self) -> None:
+        if hasattr(self, "x_input"):
+            self.profile.regions[self.current_region_key] = self._region_from_inputs()
 
     def _region_from_inputs(self) -> CropRegion:
         return CropRegion(

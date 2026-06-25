@@ -214,8 +214,8 @@ dist/POE2-P2P/POE2-P2P.exe
 - [x] Preview crop перед сохранением.
 - [x] OCR preview: raw text, parsed ratio, confidence.
 - [x] Кнопки `Retry`, `Accept`, `Adjust`.
-- [ ] Отдельные регионы для item names, ratio, amount fields, red current value.
-- [ ] Профили resolution/UI scale.
+- [x] Отдельные регионы для названий предметов, курса, полей количества и красного текущего значения.
+- [x] Профили разрешения и масштаба интерфейса игры.
 
 ### P2: рабочие views
 

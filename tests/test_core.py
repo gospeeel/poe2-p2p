@@ -6,7 +6,15 @@ from pathlib import Path
 
 from poe2_p2p.alerts import filter_profit_alerts
 from poe2_p2p.app import build_sample_opportunities
-from poe2_p2p.calibration import load_region, save_region
+from poe2_p2p.calibration import (
+    LEFT_ITEM,
+    MARKET_RATIO,
+    default_calibration_profile,
+    load_calibration_profile,
+    load_region,
+    save_calibration_profile,
+    save_region,
+)
 from poe2_p2p.calculator import ArbitrageCalculator
 from poe2_p2p.candidates import parse_poe_ninja_currency_rows, shortlist_candidates
 from poe2_p2p.config import CropRegion
@@ -195,6 +203,23 @@ class UtilityTest(unittest.TestCase):
             region = CropRegion.from_csv("385,122,90,18")
             save_region(calibration_path, region)
             self.assertEqual(load_region(calibration_path), region)
+            profile = load_calibration_profile(calibration_path)
+            self.assertEqual(profile.regions[MARKET_RATIO], region)
+            self.assertIn(LEFT_ITEM, profile.regions)
+
+            profile_path = root / "profile_calibration.json"
+            new_profile = default_calibration_profile()
+            new_profile.name = "1440p"
+            new_profile.resolution_width = 2560
+            new_profile.resolution_height = 1440
+            new_profile.ui_scale_percent = 110
+            new_profile.regions[LEFT_ITEM] = CropRegion.from_csv("1,2,30,40")
+            save_calibration_profile(profile_path, new_profile)
+            loaded_profile = load_calibration_profile(profile_path)
+            self.assertEqual(loaded_profile.name, "1440p")
+            self.assertEqual(loaded_profile.resolution_width, 2560)
+            self.assertEqual(loaded_profile.regions[LEFT_ITEM], CropRegion.from_csv("1,2,30,40"))
+            self.assertEqual(load_region(profile_path), loaded_profile.regions[MARKET_RATIO])
 
             csv_path = root / "opportunities.csv"
             export_opportunities_csv(profitable, csv_path)
