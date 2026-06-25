@@ -21,6 +21,7 @@ class AppSettings:
     opacity: int = 94
     always_on_top: bool = True
     click_through: bool = False
+    ui_scale_percent: int = 100
     first_run_complete: bool = False
     league: str = "Runes of Aldur"
 
@@ -43,6 +44,7 @@ def load_settings(path: str | Path = DEFAULT_SETTINGS_PATH) -> AppSettings:
     settings.opacity = int(data.get("opacity", settings.opacity))
     settings.always_on_top = bool(data.get("always_on_top", settings.always_on_top))
     settings.click_through = bool(data.get("click_through", settings.click_through))
+    settings.ui_scale_percent = int(data.get("ui_scale_percent", settings.ui_scale_percent))
     settings.first_run_complete = bool(data.get("first_run_complete", settings.first_run_complete))
     settings.league = str(data.get("league", settings.league))
     return settings

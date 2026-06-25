@@ -208,6 +208,13 @@ class SettingsDialog(QDialog):
             edit.setPlaceholderText("Например Ctrl+1")
             self.hotkey_inputs[action] = edit
             form.addRow(label, edit)
+        self.ui_scale_input = QSpinBox()
+        self.ui_scale_input.setRange(85, 125)
+        self.ui_scale_input.setSingleStep(5)
+        self.ui_scale_input.setSuffix("%")
+        self.ui_scale_input.setValue(settings.ui_scale_percent)
+        self.ui_scale_input.setToolTip("Масштаб таблицы и текста. 100% подходит как базовый размер, 110-125% удобнее для 1440p/4K.")
+        form.addRow("Масштаб интерфейса", self.ui_scale_input)
         layout.addLayout(form)
 
         self.conflict_label = QLabel("")
@@ -231,6 +238,7 @@ class SettingsDialog(QDialog):
             self.conflict_label.show()
             return
         self.settings.hotkeys = hotkeys
+        self.settings.ui_scale_percent = self.ui_scale_input.value()
         super().accept()
 
 
@@ -437,6 +445,7 @@ class OverlayWindow(QMainWindow):
         self._install_shortcuts()
         self._install_global_hotkeys()
         self._apply_style()
+        self._apply_ui_scale()
         self.apply_filters()
         if not self.settings.first_run_complete and os.environ.get("POE2_P2P_SKIP_FIRST_RUN") != "1":
             QTimer.singleShot(300, self.open_first_run_wizard)
@@ -923,7 +932,8 @@ class OverlayWindow(QMainWindow):
                 if column == 14 and opportunity.risk == "high":
                     item.setForeground(QColor("#ff6b6b"))
                 self.table.setItem(row, column, item)
-            self.table.setRowHeight(row, 24 if self.compact_mode else 34)
+            base_height = 24 if self.compact_mode else 34
+            self.table.setRowHeight(row, max(22, int(base_height * self._ui_scale())))
         if opportunities:
             self.table.selectRow(0)
         else:
@@ -1010,6 +1020,25 @@ class OverlayWindow(QMainWindow):
         self.setWindowOpacity(value / 100)
         save_settings(self.settings)
 
+    def _ui_scale(self) -> float:
+        return max(0.85, min(self.settings.ui_scale_percent / 100, 1.25))
+
+    def _apply_ui_scale(self) -> None:
+        scale = self._ui_scale()
+        font = self.font()
+        font.setPointSizeF(10 * scale)
+        self.setFont(font)
+
+        table_font = self.table.font()
+        table_font.setPointSizeF(9.5 * scale)
+        self.table.setFont(table_font)
+
+        header_font = self.table.horizontalHeader().font()
+        header_font.setPointSizeF(9 * scale)
+        self.table.horizontalHeader().setFont(header_font)
+
+        self.table.setIconSize(QSize(max(96, int(128 * scale)), max(20, int(24 * scale))))
+
     def hide_to_tray(self) -> None:
         self.hide()
         if self.tray.isVisible():
@@ -1031,6 +1060,8 @@ class OverlayWindow(QMainWindow):
         dialog.setStyleSheet(self.styleSheet())
         if dialog.exec() == QDialog.DialogCode.Accepted:
             save_settings(self.settings)
+            self._apply_ui_scale()
+            self.apply_filters()
             self.status_label.setText("Настройки сохранены.")
             self._refresh_hotkeys_label()
             self.hotkey_manager.restart(self.settings.hotkeys)
@@ -1207,10 +1238,12 @@ class OverlayWindow(QMainWindow):
         return " ".join(icons)
 
     def _route_icon(self, opportunity: Opportunity) -> QIcon:
-        size = 22
-        gap = 4
+        scale = self._ui_scale()
+        size = max(18, int(22 * scale))
+        gap = max(3, int(4 * scale))
         width = min(len(opportunity.path) * (size + gap), 160)
-        pixmap = QPixmap(width, 24)
+        height = max(22, int(24 * scale))
+        pixmap = QPixmap(width, height)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -1219,11 +1252,11 @@ class OverlayWindow(QMainWindow):
             if x + size > width:
                 break
             node = self._icon_for_currency(part).pixmap(size, size)
-            painter.drawPixmap(x, 1, node)
+            painter.drawPixmap(x, max(0, (height - size) // 2), node)
             x += size
             if index < len(opportunity.path) - 1 and x + gap <= width:
                 painter.setPen(QColor("#8b96a3"))
-                painter.drawLine(x, 12, x + gap - 1, 12)
+                painter.drawLine(x, height // 2, x + gap - 1, height // 2)
                 x += gap
         painter.end()
         return QIcon(pixmap)
