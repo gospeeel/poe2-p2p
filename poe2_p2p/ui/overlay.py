@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from PySide6.QtCore import QEvent, QObject, QPoint, Qt, QTimer, QUrl
+from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QIcon, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -674,6 +674,7 @@ class OverlayWindow(QMainWindow):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.setIconSize(QSize(128, 24))
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
@@ -879,7 +880,7 @@ class OverlayWindow(QMainWindow):
         self.table.setVisible(bool(opportunities))
         for row, opportunity in enumerate(opportunities):
             values = [
-                self._path_icons(opportunity),
+                "",
                 self._path_label(opportunity),
                 CHAIN_TYPE_LABELS.get(opportunity.chain_type, "неизвестно"),
                 opportunity.strategy_label,
@@ -899,7 +900,7 @@ class OverlayWindow(QMainWindow):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.ItemDataRole.UserRole, self._opportunity_tooltip(opportunity))
                 if column == 0:
-                    item.setIcon(self._icon_for_currency(opportunity.path[0]))
+                    item.setIcon(self._route_icon(opportunity))
                 if column in {6, 7} and opportunity.net_profit > 0:
                     item.setForeground(QColor("#4bd16f"))
                 if column == 14 and opportunity.risk == "high":
@@ -1151,6 +1152,28 @@ class OverlayWindow(QMainWindow):
             else:
                 icons.append("IT")
         return " ".join(icons)
+
+    def _route_icon(self, opportunity: Opportunity) -> QIcon:
+        size = 22
+        gap = 4
+        width = min(len(opportunity.path) * (size + gap), 160)
+        pixmap = QPixmap(width, 24)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        x = 0
+        for index, part in enumerate(opportunity.path):
+            if x + size > width:
+                break
+            node = self._icon_for_currency(part).pixmap(size, size)
+            painter.drawPixmap(x, 1, node)
+            x += size
+            if index < len(opportunity.path) - 1 and x + gap <= width:
+                painter.setPen(QColor("#8b96a3"))
+                painter.drawLine(x, 12, x + gap - 1, 12)
+                x += gap
+        painter.end()
+        return QIcon(pixmap)
 
     def _icon_for_currency(self, name: str) -> QIcon:
         cached = self.icon_cache.cached_icon_path(name)
