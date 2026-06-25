@@ -201,7 +201,7 @@ dist/POE2-P2P/POE2-P2P.exe
 - [x] Подключить кнопку `Экспорт` к реальному CSV save dialog, а не placeholder.
 - [x] Подключить кнопку `Кандидаты` к live poe.ninja/API списку внутри UI.
 - [x] Подключить `Скан пары` к live capture -> OCR внутри UI.
-- [ ] Подключить `Скан пары` к capture -> OCR -> расчету без CLI.
+- [x] Подключить `Скан пары` к capture -> OCR -> расчету без CLI.
 - [ ] Подключить `Скан цепочки` к guided flow по нескольким NPC парам.
 - [x] Сделать game-friendly compact mode: меньше текста, больше чисел/иконок, без горизонтальной перегрузки.
 - [x] Добавить clear empty/loading/success states для основных кнопок действия.

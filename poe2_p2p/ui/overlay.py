@@ -39,13 +39,16 @@ from PySide6.QtWidgets import (
 )
 
 from ..calibration import (
+    LEFT_ITEM,
     MARKET_RATIO,
     REGION_LABELS,
+    RIGHT_ITEM,
     default_calibration_profile,
     load_calibration_profile,
     load_region,
     save_calibration_profile,
 )
+from ..calculator import ArbitrageCalculator
 from ..capture import CaptureDependencyError, capture_screen_region, crop_image_file
 from ..config import DEFAULT_MARKET_RATIO_REGION, CropRegion
 from ..exporter import export_opportunities_csv
@@ -58,9 +61,10 @@ from ..models import (
     STRATEGY_TYPE_LABELS,
     ChainType,
     Opportunity,
+    RateEdge,
     StrategyType,
 )
-from ..ocr import OCRDependencyError, detect_tesseract_cmd, read_ratio_from_image
+from ..ocr import OCRDependencyError, detect_tesseract_cmd, read_ratio_from_image, read_text_from_image
 from ..poe_ninja import fetch_currency_candidates
 from ..presets import STRATEGY_PRESETS
 from ..settings import ACTION_LABELS, AppSettings, find_hotkey_conflicts, load_settings, save_settings
@@ -462,6 +466,7 @@ class OverlayWindow(QMainWindow):
     def __init__(self, opportunities: list[Opportunity]) -> None:
         super().__init__()
         self.opportunities = [item for item in opportunities if item.net_profit > 0]
+        self.live_rates = self._rates_from_opportunities(opportunities)
         self.filtered_opportunities: list[Opportunity] = []
         self.compact_mode = False
         self.settings = load_settings()
@@ -1149,7 +1154,8 @@ class OverlayWindow(QMainWindow):
         self.status_label.setText("Скан пары: снимаю область Market Ratio.")
         QApplication.processEvents()
 
-        region = self._load_scan_region()
+        profile = self._load_scan_profile()
+        region = profile.regions[MARKET_RATIO]
         temp_path = None
         try:
             with NamedTemporaryFile(prefix="poe2_p2p_ratio_", suffix=".png", delete=False) as file:
@@ -1165,17 +1171,33 @@ class OverlayWindow(QMainWindow):
                 temp_path.unlink(missing_ok=True)
 
         left, right = result.ratio
+        left_name = self._scan_region_text(profile, LEFT_ITEM)
+        right_name = self._scan_region_text(profile, RIGHT_ITEM)
+        recalculated = False
+        if left_name and right_name:
+            new_edges = self._edges_from_scanned_ratio(left_name, right_name, result.ratio, result.confidence)
+            self.live_rates.extend(new_edges)
+            recalculated = self._recalculate_opportunities()
         text = (
             "Последний скан Market Ratio\n\n"
             f"Область: x={region.x}, y={region.y}, width={region.width}, height={region.height}\n"
             f"OCR текст: {result.raw_text or 'пусто'}\n"
             f"Распознанный курс: {left:g} : {right:g}\n"
+            f"Левая сторона: {left_name or 'не распознано'}\n"
+            f"Правая сторона: {right_name or 'не распознано'}\n"
             f"Уверенность: {result.confidence:.2f}\n\n"
-            "Следующий этап: распознавать названия валют и поля количества, чтобы сразу строить курс и пересчитывать связки."
+            + (
+                "Курс добавлен в граф, таблица пересчитана."
+                if recalculated
+                else "Курс прочитан, но для пересчета нужны распознанные названия обеих сторон и прибыльный цикл."
+            )
         )
         self.live_scan_view.setPlainText(text)
         self.ocr_debug_view.setPlainText(text)
-        self.status_label.setText(f"Скан пары выполнен: {left:g} : {right:g}, уверенность {result.confidence:.2f}.")
+        self.status_label.setText(
+            f"Скан пары выполнен: {left:g} : {right:g}. "
+            + ("Таблица пересчитана." if recalculated else "Ожидаю полный цикл для расчета.")
+        )
 
     def scan_chain(self) -> None:
         self.status_label.setText(
@@ -1242,6 +1264,95 @@ class OverlayWindow(QMainWindow):
         if calibration_path.exists():
             return load_region(calibration_path)
         return DEFAULT_MARKET_RATIO_REGION
+
+    @staticmethod
+    def _load_scan_profile():
+        calibration_path = Path("calibration.json")
+        if calibration_path.exists():
+            return load_calibration_profile(calibration_path)
+        return default_calibration_profile()
+
+    def _scan_region_text(self, profile, region_key: str) -> str:
+        region = profile.regions.get(region_key)
+        if not region:
+            return ""
+        temp_path = None
+        try:
+            with NamedTemporaryFile(prefix="poe2_p2p_text_", suffix=".png", delete=False) as file:
+                temp_path = Path(file.name)
+            capture_screen_region(region, temp_path)
+            result = read_text_from_image(temp_path)
+        except (CaptureDependencyError, OCRDependencyError, ValueError):
+            return ""
+        finally:
+            if temp_path:
+                temp_path.unlink(missing_ok=True)
+        return self._normalize_currency_name(result.raw_text)
+
+    def _edges_from_scanned_ratio(
+        self,
+        left_name: str,
+        right_name: str,
+        ratio: tuple[float, float],
+        confidence: float,
+    ) -> list[RateEdge]:
+        left, right = ratio
+        if left <= 0 or right <= 0:
+            return []
+        forward = right / left
+        return [
+            RateEdge(left_name, right_name, forward, "OCR из игры", confidence=confidence),
+            RateEdge(right_name, left_name, 1 / forward, "OCR из игры:обратный курс", confidence=confidence),
+        ]
+
+    def _recalculate_opportunities(self) -> bool:
+        if not self.live_rates:
+            return False
+        starts = ("Exalted Orb", "Divine Orb", "Chaos Orb")
+        input_amounts = {"Exalted Orb": 2050.0, "Divine Orb": 10.0, "Chaos Orb": 1000.0}
+        calculator = ArbitrageCalculator(self.live_rates)
+        opportunities = []
+        for start in starts:
+            opportunities.extend(
+                calculator.find_cycles(start, input_amounts[start], max_hops=5)
+            )
+        profitable = [item for item in opportunities if item.net_profit > 0]
+        if not profitable:
+            return False
+        self.opportunities = profitable
+        self.apply_filters()
+        return True
+
+    @staticmethod
+    def _rates_from_opportunities(opportunities: list[Opportunity]) -> list[RateEdge]:
+        rates = []
+        for opportunity in opportunities:
+            for step in opportunity.steps:
+                rates.append(
+                    RateEdge(
+                        step.from_currency,
+                        step.to_currency,
+                        step.rate,
+                        step.source,
+                        confidence=step.confidence,
+                        observed_stock=step.observed_stock,
+                    )
+                )
+        return rates
+
+    @staticmethod
+    def _normalize_currency_name(value: str) -> str:
+        cleaned = " ".join(value.replace("\n", " ").split()).strip(" :")
+        lowered = cleaned.lower()
+        aliases = {
+            "exalted": "Exalted Orb",
+            "exalted orb": "Exalted Orb",
+            "divine": "Divine Orb",
+            "divine orb": "Divine Orb",
+            "chaos": "Chaos Orb",
+            "chaos orb": "Chaos Orb",
+        }
+        return aliases.get(lowered, cleaned)
 
     def show_error(self, message: str) -> None:
         self.error_label.setText(message)

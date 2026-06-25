@@ -20,6 +20,12 @@ class RatioOCRResult:
     confidence: float
 
 
+@dataclass(frozen=True)
+class TextOCRResult:
+    raw_text: str
+    confidence: float
+
+
 def preprocess_ratio_image(image_path: str | Path):
     try:
         import cv2
@@ -70,6 +76,37 @@ def read_ratio_from_image(image_path: str | Path) -> RatioOCRResult:
         pass
 
     return RatioOCRResult(raw_text=raw_text, ratio=ratio, confidence=confidence)
+
+
+def read_text_from_image(image_path: str | Path) -> TextOCRResult:
+    try:
+        import pytesseract
+    except ImportError as error:
+        raise OCRDependencyError(
+            "pytesseract is required for OCR. Install requirements.txt and Tesseract OCR."
+        ) from error
+    _configure_tesseract_cmd(pytesseract)
+
+    processed = preprocess_ratio_image(image_path)
+    config = "--psm 7"
+    try:
+        raw_text = pytesseract.image_to_string(processed, config=config).strip()
+    except Exception as error:
+        if error.__class__.__name__ == "TesseractNotFoundError":
+            raise OCRDependencyError(
+                "Tesseract OCR binary is not installed or is not in PATH."
+            ) from error
+        raise
+
+    confidence = 0.80
+    try:
+        data = pytesseract.image_to_data(processed, config=config, output_type=pytesseract.Output.DICT)
+        values = [float(value) for value in data.get("conf", []) if float(value) >= 0]
+        if values:
+            confidence = sum(values) / len(values) / 100
+    except Exception:
+        pass
+    return TextOCRResult(raw_text=raw_text, confidence=confidence)
 
 
 def _configure_tesseract_cmd(pytesseract_module) -> None:
