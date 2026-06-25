@@ -60,6 +60,7 @@ class SQLiteStore:
                     age_seconds REAL DEFAULT 0 NOT NULL,
                     volume_score REAL DEFAULT 0 NOT NULL,
                     execution_steps INTEGER DEFAULT 0 NOT NULL,
+                    execution_time_seconds REAL DEFAULT 0 NOT NULL,
                     source TEXT NOT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 );
@@ -83,6 +84,7 @@ class SQLiteStore:
             "age_seconds": "ALTER TABLE opportunities ADD COLUMN age_seconds REAL DEFAULT 0 NOT NULL",
             "volume_score": "ALTER TABLE opportunities ADD COLUMN volume_score REAL DEFAULT 0 NOT NULL",
             "execution_steps": "ALTER TABLE opportunities ADD COLUMN execution_steps INTEGER DEFAULT 0 NOT NULL",
+            "execution_time_seconds": "ALTER TABLE opportunities ADD COLUMN execution_time_seconds REAL DEFAULT 0 NOT NULL",
         }
         for column, statement in migrations.items():
             if column not in existing:
@@ -138,8 +140,9 @@ class SQLiteStore:
                     age_seconds,
                     volume_score,
                     execution_steps,
+                    execution_time_seconds,
                     source
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -160,6 +163,7 @@ class SQLiteStore:
                         opportunity.age_seconds,
                         opportunity.volume_score,
                         opportunity.execution_steps,
+                        opportunity.execution_time_seconds,
                         opportunity.source,
                     )
                     for opportunity in opportunities
@@ -188,6 +192,7 @@ class SQLiteStore:
                     age_seconds,
                     volume_score,
                     execution_steps,
+                    execution_time_seconds,
                     created_at
                 FROM opportunities
                 ORDER BY id DESC

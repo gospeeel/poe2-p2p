@@ -83,6 +83,22 @@ class CalculatorTest(unittest.TestCase):
         self.assertAlmostEqual(opportunity.profit_per_hour, 427.032)
         self.assertGreater(opportunity.score, 0)
 
+    def test_step_losses_execution_time_and_bankroll_filter(self):
+        _, opportunities = build_sample_opportunities(
+            rounding_loss_per_step=1,
+            gold_cost_per_step=2,
+            seconds_per_step=2,
+        )
+        opportunity = [item for item in opportunities if item.net_profit > 0][0]
+        self.assertAlmostEqual(opportunity.net_profit, 172.68)
+        self.assertEqual(opportunity.execution_time_seconds, 6)
+        self.assertAlmostEqual(opportunity.profit_per_hour, 103608.0)
+        self.assertEqual(opportunity.steps[0].rounding_loss, 1)
+        self.assertEqual(opportunity.steps[0].gold_cost, 2)
+
+        _, blocked = build_sample_opportunities(min_bankroll=999999)
+        self.assertEqual(blocked, [])
+
     def test_multi_hop_cycle_search(self):
         rates = [
             RateEdge("A", "B", 2.0, "test"),

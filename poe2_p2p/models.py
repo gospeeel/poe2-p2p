@@ -99,6 +99,10 @@ class OpportunityStep:
     confidence: float
     observed_stock: float | None = None
     age_seconds: float = 0.0
+    rounding_loss: float = 0.0
+    gold_cost: float = 0.0
+    stale_penalty: float = 0.0
+    confidence_penalty: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -120,6 +124,7 @@ class Opportunity:
     age_seconds: float = 0.0
     volume_score: float = 0.0
     execution_steps: int = 0
+    execution_time_seconds: float = 0.0
     steps: tuple[OpportunityStep, ...] = ()
     risk_reasons: tuple[str, ...] = ()
     strategy_types: tuple[StrategyType, ...] = (StrategyType.GENERIC,)

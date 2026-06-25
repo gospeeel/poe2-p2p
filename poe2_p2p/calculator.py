@@ -20,6 +20,13 @@ class ArbitrageCalculator:
         spread_loss_percent: float = 0.0,
         rounding_loss_flat: float = 0.0,
         gold_cost_flat: float = 0.0,
+        rounding_loss_per_step: float = 0.0,
+        gold_cost_per_step: float = 0.0,
+        stale_after_seconds: float = 120.0,
+        stale_penalty_percent: float = 0.0,
+        low_confidence_penalty_percent: float = 0.0,
+        seconds_per_step: float = 0.0,
+        min_bankroll: float = 0.0,
         cycles_per_hour: float = 1.0,
         min_roi_percent: float = 0.0,
         min_net_profit: float = 0.0,
@@ -29,6 +36,13 @@ class ArbitrageCalculator:
         self.spread_loss_percent = spread_loss_percent
         self.rounding_loss_flat = rounding_loss_flat
         self.gold_cost_flat = gold_cost_flat
+        self.rounding_loss_per_step = rounding_loss_per_step
+        self.gold_cost_per_step = gold_cost_per_step
+        self.stale_after_seconds = stale_after_seconds
+        self.stale_penalty_percent = stale_penalty_percent
+        self.low_confidence_penalty_percent = low_confidence_penalty_percent
+        self.seconds_per_step = seconds_per_step
+        self.min_bankroll = min_bankroll
         self.cycles_per_hour = cycles_per_hour
         self.min_roi_percent = min_roi_percent
         self.min_net_profit = min_net_profit
@@ -44,6 +58,8 @@ class ArbitrageCalculator:
         input_amount: float,
         max_hops: int = 4,
     ) -> list[Opportunity]:
+        if input_amount < self.min_bankroll:
+            return []
         opportunities: list[Opportunity] = []
         self._walk(
             start_currency=start_currency,
@@ -116,11 +132,32 @@ class ArbitrageCalculator:
         gross_profit = output_amount - input_amount
         variable_loss_percent = self.slippage_buffer_percent + self.spread_loss_percent
         variable_loss = max(gross_profit, 0.0) * (variable_loss_percent / 100)
-        fixed_loss = self.rounding_loss_flat + self.gold_cost_flat
+        step_rounding_loss = len(edges) * self.rounding_loss_per_step
+        step_gold_cost = len(edges) * self.gold_cost_per_step
+        stale_edges = [
+            edge for edge in edges
+            if (datetime.now(UTC) - edge.timestamp).total_seconds() > self.stale_after_seconds
+        ]
+        stale_penalty = max(gross_profit, 0.0) * (self.stale_penalty_percent / 100) * len(stale_edges)
+        low_confidence_edges = [edge for edge in edges if edge.confidence < 0.85]
+        confidence_penalty = max(gross_profit, 0.0) * (self.low_confidence_penalty_percent / 100) * len(low_confidence_edges)
+        fixed_loss = (
+            self.rounding_loss_flat
+            + self.gold_cost_flat
+            + step_rounding_loss
+            + step_gold_cost
+            + stale_penalty
+            + confidence_penalty
+        )
         net_profit = gross_profit - variable_loss - fixed_loss
         roi_percent = net_profit / input_amount * 100 if input_amount else 0.0
         confidence = prod(edge.confidence for edge in edges)
-        profit_per_hour = net_profit * self.cycles_per_hour
+        execution_time_seconds = len(edges) * self.seconds_per_step if self.seconds_per_step > 0 else 0.0
+        profit_per_hour = (
+            net_profit * 3600 / execution_time_seconds
+            if execution_time_seconds > 0
+            else net_profit * self.cycles_per_hour
+        )
         score = profit_per_hour * confidence
         source = ", ".join(edge.source for edge in edges)
         stocks = [edge.observed_stock for edge in edges if edge.observed_stock is not None]
@@ -130,7 +167,13 @@ class ArbitrageCalculator:
             (datetime.now(UTC) - edge.timestamp).total_seconds()
             for edge in edges
         ) if edges else 0.0
-        steps = self._build_steps(input_amount, edges)
+        steps = self._build_steps(
+            input_amount,
+            edges,
+            stale_edges=tuple(stale_edges),
+            low_confidence_edges=tuple(low_confidence_edges),
+            gross_profit=max(gross_profit, 0.0),
+        )
         risk, risk_reasons = self._risk_label(
             roi_percent=roi_percent,
             confidence=confidence,
@@ -159,16 +202,25 @@ class ArbitrageCalculator:
             age_seconds=age_seconds,
             volume_score=volume_score,
             execution_steps=len(edges),
+            execution_time_seconds=execution_time_seconds,
             steps=steps,
             risk_reasons=risk_reasons,
         )
         return replace(opportunity, strategy_types=classify_strategies(opportunity))
 
-    @staticmethod
-    def _build_steps(input_amount: float, edges: tuple[RateEdge, ...]) -> tuple[OpportunityStep, ...]:
+    def _build_steps(
+        self,
+        input_amount: float,
+        edges: tuple[RateEdge, ...],
+        stale_edges: tuple[RateEdge, ...],
+        low_confidence_edges: tuple[RateEdge, ...],
+        gross_profit: float,
+    ) -> tuple[OpportunityStep, ...]:
         steps = []
         current_amount = input_amount
         now = datetime.now(UTC)
+        stale_edge_set = set(stale_edges)
+        low_confidence_edge_set = set(low_confidence_edges)
         for edge in edges:
             output_amount = edge.convert(current_amount)
             steps.append(
@@ -182,6 +234,18 @@ class ArbitrageCalculator:
                     confidence=edge.confidence,
                     observed_stock=edge.observed_stock,
                     age_seconds=(now - edge.timestamp).total_seconds(),
+                    rounding_loss=self.rounding_loss_per_step,
+                    gold_cost=self.gold_cost_per_step,
+                    stale_penalty=(
+                        gross_profit * (self.stale_penalty_percent / 100)
+                        if edge in stale_edge_set
+                        else 0.0
+                    ),
+                    confidence_penalty=(
+                        gross_profit * (self.low_confidence_penalty_percent / 100)
+                        if edge in low_confidence_edge_set
+                        else 0.0
+                    ),
                 )
             )
             current_amount = output_amount

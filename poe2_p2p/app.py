@@ -29,6 +29,12 @@ def build_sample_opportunities(
     spread_loss_percent: float = 0.0,
     rounding_loss_flat: float = 0.0,
     gold_cost_flat: float = 0.0,
+    rounding_loss_per_step: float = 0.0,
+    gold_cost_per_step: float = 0.0,
+    stale_penalty_percent: float = 0.0,
+    low_confidence_penalty_percent: float = 0.0,
+    seconds_per_step: float = 0.0,
+    min_bankroll: float = 0.0,
     cycles_per_hour: float = 1.0,
     min_roi_percent: float = 0.0,
 ):
@@ -39,6 +45,12 @@ def build_sample_opportunities(
         spread_loss_percent=spread_loss_percent,
         rounding_loss_flat=rounding_loss_flat,
         gold_cost_flat=gold_cost_flat,
+        rounding_loss_per_step=rounding_loss_per_step,
+        gold_cost_per_step=gold_cost_per_step,
+        stale_penalty_percent=stale_penalty_percent,
+        low_confidence_penalty_percent=low_confidence_penalty_percent,
+        seconds_per_step=seconds_per_step,
+        min_bankroll=min_bankroll,
         cycles_per_hour=cycles_per_hour,
         min_roi_percent=min_roi_percent,
     )
@@ -138,6 +150,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--spread-percent", type=float, default=0.0)
     parser.add_argument("--rounding-loss", type=float, default=0.0)
     parser.add_argument("--gold-cost", type=float, default=0.0)
+    parser.add_argument("--rounding-loss-per-step", type=float, default=0.0)
+    parser.add_argument("--gold-cost-per-step", type=float, default=0.0)
+    parser.add_argument("--stale-penalty-percent", type=float, default=0.0)
+    parser.add_argument("--low-confidence-penalty-percent", type=float, default=0.0)
+    parser.add_argument("--seconds-per-step", type=float, default=0.0)
+    parser.add_argument("--min-bankroll", type=float, default=0.0)
     parser.add_argument(
         "--db",
         default="poe2_p2p.db",
@@ -255,6 +273,12 @@ def main(argv: list[str] | None = None) -> int:
         spread_loss_percent=args.spread_percent,
         rounding_loss_flat=args.rounding_loss,
         gold_cost_flat=args.gold_cost,
+        rounding_loss_per_step=args.rounding_loss_per_step,
+        gold_cost_per_step=args.gold_cost_per_step,
+        stale_penalty_percent=args.stale_penalty_percent,
+        low_confidence_penalty_percent=args.low_confidence_penalty_percent,
+        seconds_per_step=args.seconds_per_step,
+        min_bankroll=args.min_bankroll,
         cycles_per_hour=args.cycles_per_hour,
         min_roi_percent=preset.min_roi_percent,
     )

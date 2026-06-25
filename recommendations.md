@@ -333,16 +333,16 @@ score =
 
 - [x] Market depth / stock limit для каждого ребра через `observed_stock` в `RateEdge`/`OpportunityStep`.
 - [x] Max executable size для всей цепочки через минимальный stock по ребрам.
-- [ ] Rounding loss по каждому шагу, а не только flat estimate.
-- [ ] Gold cost model по шагам.
-- [ ] Stale-data penalty.
-- [ ] OCR confidence penalty по конкретному ребру.
+- [x] Rounding loss по каждому шагу, а не только flat estimate.
+- [x] Gold cost model по шагам.
+- [x] Stale-data penalty.
+- [x] OCR confidence penalty по конкретному ребру.
 - [x] Liquidity factor из observed stock/API-полей, если источник их передает.
 - [ ] Trend factor из poe.ninja/API в live opportunities.
-- [ ] Execution time estimate: clicks/steps per cycle.
-- [ ] Profit/hour с учетом execution time, а не только `cycles_per_hour` вручную.
-- [ ] Kill-switch: скрывать цепочки с отрицательным net после всех потерь.
-- [ ] Minimum bankroll filter: сколько валюты нужно для meaningful cycle.
+- [x] Execution time estimate: clicks/steps per cycle.
+- [x] Profit/hour с учетом execution time, а не только `cycles_per_hour` вручную.
+- [x] Kill-switch: скрывать цепочки с отрицательным net после всех потерь.
+- [x] Minimum bankroll filter: сколько валюты нужно для осмысленного цикла.
 - [x] Risk labels: low/medium/high с понятной причиной.
 
 ### Следующий экономический milestone

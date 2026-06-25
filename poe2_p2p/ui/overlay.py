@@ -1504,6 +1504,7 @@ class OverlayWindow(QMainWindow):
             f"Оценка объема: {opportunity.volume_score:.0f}\n"
             f"Максимальный размер: {'нет данных' if opportunity.max_size is None else f'{opportunity.max_size:.0f}'}\n"
             f"Шагов исполнения: {opportunity.execution_steps}\n"
+            f"Время исполнения: {opportunity.execution_time_seconds:.1f} сек\n"
             f"Смысл стратегии: {strategy_descriptions}\n"
             f"Причины риска: {risk_reasons}\n"
             f"Источник курсов: {opportunity.source}\n\n"
@@ -1548,6 +1549,13 @@ class OverlayWindow(QMainWindow):
                 f"возраст: {self._age_label(step.age_seconds)}; "
                 f"объем: {'нет данных' if step.observed_stock is None else f'{step.observed_stock:.0f}'}"
             )
+            losses = step.rounding_loss + step.gold_cost + step.stale_penalty + step.confidence_penalty
+            if losses > 0:
+                lines.append(
+                    f"   потери шага: округление {step.rounding_loss:.4f}; "
+                    f"золото {step.gold_cost:.4f}; устаревание {step.stale_penalty:.4f}; "
+                    f"низкая уверенность {step.confidence_penalty:.4f}"
+                )
         lines.extend(
             [
                 "",
@@ -1558,6 +1566,7 @@ class OverlayWindow(QMainWindow):
                 f"Чистый профит: {opportunity.net_profit:.4f}",
                 f"Доходность: {opportunity.roi_percent:.2f}%",
                 f"Профит/ч: {opportunity.profit_per_hour:.4f}",
+                f"Время исполнения: {opportunity.execution_time_seconds:.1f} сек",
                 "",
                 "Экономический смысл:",
             ]

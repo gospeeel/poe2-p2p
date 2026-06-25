@@ -28,6 +28,7 @@ def export_opportunities_csv(opportunities: list[Opportunity], path: str | Path)
                 "age_seconds",
                 "volume_score",
                 "execution_steps",
+                "execution_time_seconds",
                 "source",
             ]
         )
@@ -51,6 +52,7 @@ def export_opportunities_csv(opportunities: list[Opportunity], path: str | Path)
                     f"{opportunity.age_seconds:.8f}",
                     f"{opportunity.volume_score:.8f}",
                     opportunity.execution_steps,
+                    f"{opportunity.execution_time_seconds:.8f}",
                     opportunity.source,
                 ]
             )
