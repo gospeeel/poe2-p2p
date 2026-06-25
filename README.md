@@ -72,6 +72,14 @@ Launch POE2 P2P from Start Menu or Desktop shortcut
 - строку `Живое распознавание Market Ratio` в отчете;
 - итоговую связку и профит в таблице приложения.
 
+Для полной проверки Windows-запуска можно использовать готовый скрипт из корня проекта:
+
+```text
+validate_windows.bat
+```
+
+Он найдет установленный `POE2-P2P.exe` или локальный `dist\POE2-P2P\POE2-P2P.exe`, запустит диагностику, создаст `logs\windows-validation.md` и предложит вручную проверить окно, трей и закрытие приложения.
+
 Developer/manual setup after copying the project folder to a Windows PC:
 
 1. Install Tesseract OCR.

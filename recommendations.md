@@ -236,6 +236,7 @@ dist/POE2-P2P/POE2-P2P.exe
 - [x] First-run wizard: Tesseract status, calibration, hotkeys, league.
 - [x] Crash/error log file и кнопка открыть logs.
 - [x] Диагностический отчет запуска для проверки Windows и живого окружения.
+- [x] Windows-скрипт проверки для сбора отчета и ручной проверки окна приложения.
 
 ## Экономическая выгодность
 
