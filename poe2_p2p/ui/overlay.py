@@ -520,6 +520,7 @@ class OverlayWindow(QMainWindow):
 
     def _build_filter_bar(self) -> None:
         bar = QFrame()
+        self.filter_bar = bar
         bar.setObjectName("panel")
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(8, 6, 8, 6)
@@ -937,9 +938,20 @@ class OverlayWindow(QMainWindow):
 
     def toggle_compact_mode(self) -> None:
         self.compact_mode = not self.compact_mode
-        self.resize(860, 260) if self.compact_mode else self.resize(1120, 420)
+        self.resize(780, 240) if self.compact_mode else self.resize(1120, 420)
+        self._apply_compact_layout()
         self.apply_filters()
         self.status_label.setText("Компактный режим включен." if self.compact_mode else "Полный режим включен.")
+
+    def _apply_compact_layout(self) -> None:
+        compact_hidden_columns = {2, 3, 4, 5, 9, 10, 11, 12, 13}
+        for column in range(self.table.columnCount()):
+            self.table.setColumnHidden(column, self.compact_mode and column in compact_hidden_columns)
+        self.table.horizontalHeader().setVisible(not self.compact_mode)
+        self.tabs.tabBar().setVisible(not self.compact_mode)
+        self.filter_bar.setVisible(not self.compact_mode)
+        if self.compact_mode:
+            self.tabs.setCurrentWidget(self.opportunities_tab)
 
     def toggle_always_on_top(self) -> None:
         self.settings.always_on_top = self.always_on_top.isChecked()
