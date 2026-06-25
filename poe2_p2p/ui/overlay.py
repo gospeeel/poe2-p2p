@@ -468,6 +468,8 @@ class OverlayWindow(QMainWindow):
         self.opportunities = [item for item in opportunities if item.net_profit > 0]
         self.live_rates = self._rates_from_opportunities(opportunities)
         self.filtered_opportunities: list[Opportunity] = []
+        self.chain_scan_active = False
+        self.chain_scan_steps: list[str] = []
         self.compact_mode = False
         self.settings = load_settings()
         self.icon_cache = IconCache()
@@ -1177,6 +1179,8 @@ class OverlayWindow(QMainWindow):
         if left_name and right_name:
             new_edges = self._edges_from_scanned_ratio(left_name, right_name, result.ratio, result.confidence)
             self.live_rates.extend(new_edges)
+            if self.chain_scan_active:
+                self.chain_scan_steps.append(f"{left_name} -> {right_name}: {left:g} : {right:g}")
             recalculated = self._recalculate_opportunities()
         text = (
             "Последний скан Market Ratio\n\n"
@@ -1196,12 +1200,43 @@ class OverlayWindow(QMainWindow):
         self.ocr_debug_view.setPlainText(text)
         self.status_label.setText(
             f"Скан пары выполнен: {left:g} : {right:g}. "
-            + ("Таблица пересчитана." if recalculated else "Ожидаю полный цикл для расчета.")
+            + (
+                f"Шаг цепочки сохранен: {len(self.chain_scan_steps)}."
+                if self.chain_scan_active and left_name and right_name
+                else ("Таблица пересчитана." if recalculated else "Ожидаю полный цикл для расчета.")
+            )
         )
 
     def scan_chain(self) -> None:
+        if not self.chain_scan_active:
+            self.chain_scan_active = True
+            self.chain_scan_steps = []
+            text = (
+                "Пошаговый скан цепочки начат.\n\n"
+                "1. Открой первую пару в NPC Currency Exchange.\n"
+                "2. Нажми `Скан пары`.\n"
+                "3. Перейди к следующей паре и повтори.\n"
+                "4. Нажми `Скан цепочки` еще раз, чтобы завершить и пересчитать таблицу."
+            )
+            self.live_scan_view.setPlainText(text)
+            self.tabs.setCurrentWidget(self.live_scan_view)
+            self.status_label.setText("Скан цепочки начат. Нажимай `Скан пары` для каждого шага.")
+            return
+
+        self.chain_scan_active = False
+        recalculated = self._recalculate_opportunities()
+        lines = [
+            "Пошаговый скан цепочки завершен.",
+            "",
+            f"Сохранено шагов: {len(self.chain_scan_steps)}",
+            "",
+            *self.chain_scan_steps,
+        ]
+        self.live_scan_view.setPlainText("\n".join(lines))
         self.status_label.setText(
-            "Скан цепочки требует выбора нескольких пар. Сейчас используй Скан пары для каждого Market Ratio; пошаговый режим будет следующим этапом."
+            "Скан цепочки завершен, таблица пересчитана."
+            if recalculated
+            else "Скан цепочки завершен, прибыльный цикл пока не найден."
         )
 
     def refresh_candidates(self) -> None:
