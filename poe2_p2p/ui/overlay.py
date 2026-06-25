@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QTimer, QUrl
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont, QIcon, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QPushButton,
     QLineEdit,
+    QRubberBand,
     QSizeGrip,
     QSlider,
     QSpinBox,
@@ -200,6 +201,53 @@ class TitleBar(QFrame):
         event.accept()
 
 
+class RegionSelectionOverlay(QWidget):
+    def __init__(self, callback, parent=None) -> None:
+        super().__init__(parent)
+        self.callback = callback
+        self.origin = QPoint()
+        self.rubber_band = QRubberBand(QRubberBand.Shape.Rectangle, self)
+        self.setWindowTitle("Выделение области")
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.Tool
+            | Qt.WindowType.WindowStaysOnTopHint
+        )
+        self.setWindowOpacity(0.25)
+        self.setCursor(Qt.CursorShape.CrossCursor)
+        self.setStyleSheet("background: rgba(20, 120, 220, 80);")
+
+        screen = QApplication.primaryScreen()
+        if screen:
+            self.setGeometry(screen.geometry())
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        self.origin = event.position().toPoint()
+        self.rubber_band.setGeometry(QRect(self.origin, QSize()))
+        self.rubber_band.show()
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self.rubber_band.isVisible():
+            self.rubber_band.setGeometry(QRect(self.origin, event.position().toPoint()).normalized())
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        rect = QRect(self.origin, event.position().toPoint()).normalized()
+        self.rubber_band.hide()
+        if rect.width() > 0 and rect.height() > 0:
+            self.callback(CropRegion(rect.x(), rect.y(), rect.width(), rect.height()))
+        self.close()
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() == Qt.Key.Key_Escape:
+            self.close()
+            return
+        super().keyPressEvent(event)
+
+
 class SettingsDialog(QDialog):
     def __init__(self, settings: AppSettings, parent=None) -> None:
         super().__init__(parent)
@@ -325,15 +373,23 @@ class CalibrationDialog(QDialog):
         layout.addWidget(self.result)
 
         actions = QHBoxLayout()
+        self.tooltip_filter = DelayedToolTipFilter()
+        select_button = QPushButton("Выделить мышью")
+        select_button.clicked.connect(self.select_region_with_mouse)
+        select_button.setToolTip(
+            "Откроет прозрачный слой поверх экрана. Зажми левую кнопку мыши, "
+            "выдели прямоугольник нужной области и отпусти кнопку."
+        )
+        select_button.installEventFilter(self.tooltip_filter)
         preview_button = QPushButton("Проверить")
         preview_button.clicked.connect(self.update_preview)
-        ocr_button = QPushButton("OCR")
+        ocr_button = QPushButton("Распознать")
         ocr_button.clicked.connect(self.run_ocr)
         accept_button = QPushButton("Принять")
         accept_button.clicked.connect(self.accept)
         cancel_button = QPushButton("Отмена")
         cancel_button.clicked.connect(self.reject)
-        for button in [preview_button, ocr_button, accept_button, cancel_button]:
+        for button in [select_button, preview_button, ocr_button, accept_button, cancel_button]:
             actions.addWidget(button)
         layout.addLayout(actions)
 
@@ -366,7 +422,7 @@ class CalibrationDialog(QDialog):
 
             result = read_ratio_from_image("_calibration_preview.png")
         except (OCRDependencyError, ValueError, FileNotFoundError) as error:
-            self.result.setText(f"OCR не сработал: {error}")
+            self.result.setText(f"Распознавание не сработало: {error}")
             return
         left, right = result.ratio
         self.result.setText(
@@ -383,6 +439,22 @@ class CalibrationDialog(QDialog):
         self.profile.ui_scale_percent = self.profile_scale.value()
         save_calibration_profile(self.calibration_path, self.profile)
         super().accept()
+
+    def select_region_with_mouse(self) -> None:
+        self.selector = RegionSelectionOverlay(self.apply_mouse_region, self)
+        self.selector.showFullScreen()
+        self.result.setText("Выдели область мышью. Esc отменяет выбор.")
+
+    def apply_mouse_region(self, region: CropRegion) -> None:
+        self.x_input.setValue(region.x)
+        self.y_input.setValue(region.y)
+        self.width_input.setValue(region.width)
+        self.height_input.setValue(region.height)
+        self._store_current_region()
+        label = REGION_LABELS.get(self.current_region_key, self.current_region_key)
+        self.result.setText(
+            f"Область {label} выбрана мышью: {region.x},{region.y},{region.width},{region.height}"
+        )
 
     def change_region(self) -> None:
         self._store_current_region()

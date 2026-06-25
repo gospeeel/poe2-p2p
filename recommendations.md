@@ -210,7 +210,7 @@ dist/POE2-P2P/POE2-P2P.exe
 
 ### P1: calibration UX
 
-- [ ] Calibration mode с выделением области `Market Ratio`.
+- [x] Calibration mode с выделением области `Market Ratio`.
 - [x] Preview crop перед сохранением.
 - [x] OCR preview: raw text, parsed ratio, confidence.
 - [x] Кнопки `Retry`, `Accept`, `Adjust`.
