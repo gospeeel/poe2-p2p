@@ -59,6 +59,7 @@ class SQLiteStore:
                     max_size REAL,
                     age_seconds REAL DEFAULT 0 NOT NULL,
                     volume_score REAL DEFAULT 0 NOT NULL,
+                    trend_percent REAL DEFAULT 0 NOT NULL,
                     execution_steps INTEGER DEFAULT 0 NOT NULL,
                     execution_time_seconds REAL DEFAULT 0 NOT NULL,
                     source TEXT NOT NULL,
@@ -83,6 +84,7 @@ class SQLiteStore:
             "max_size": "ALTER TABLE opportunities ADD COLUMN max_size REAL",
             "age_seconds": "ALTER TABLE opportunities ADD COLUMN age_seconds REAL DEFAULT 0 NOT NULL",
             "volume_score": "ALTER TABLE opportunities ADD COLUMN volume_score REAL DEFAULT 0 NOT NULL",
+            "trend_percent": "ALTER TABLE opportunities ADD COLUMN trend_percent REAL DEFAULT 0 NOT NULL",
             "execution_steps": "ALTER TABLE opportunities ADD COLUMN execution_steps INTEGER DEFAULT 0 NOT NULL",
             "execution_time_seconds": "ALTER TABLE opportunities ADD COLUMN execution_time_seconds REAL DEFAULT 0 NOT NULL",
         }
@@ -139,10 +141,11 @@ class SQLiteStore:
                     max_size,
                     age_seconds,
                     volume_score,
+                    trend_percent,
                     execution_steps,
                     execution_time_seconds,
                     source
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -162,6 +165,7 @@ class SQLiteStore:
                         opportunity.max_size,
                         opportunity.age_seconds,
                         opportunity.volume_score,
+                        opportunity.trend_percent,
                         opportunity.execution_steps,
                         opportunity.execution_time_seconds,
                         opportunity.source,
@@ -191,6 +195,7 @@ class SQLiteStore:
                     max_size,
                     age_seconds,
                     volume_score,
+                    trend_percent,
                     execution_steps,
                     execution_time_seconds,
                     created_at

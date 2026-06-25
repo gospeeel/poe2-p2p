@@ -27,6 +27,7 @@ class ArbitrageCalculator:
         low_confidence_penalty_percent: float = 0.0,
         seconds_per_step: float = 0.0,
         min_bankroll: float = 0.0,
+        trend_by_currency: dict[str, float] | None = None,
         cycles_per_hour: float = 1.0,
         min_roi_percent: float = 0.0,
         min_net_profit: float = 0.0,
@@ -43,6 +44,7 @@ class ArbitrageCalculator:
         self.low_confidence_penalty_percent = low_confidence_penalty_percent
         self.seconds_per_step = seconds_per_step
         self.min_bankroll = min_bankroll
+        self.trend_by_currency = trend_by_currency or {}
         self.cycles_per_hour = cycles_per_hour
         self.min_roi_percent = min_roi_percent
         self.min_net_profit = min_net_profit
@@ -158,7 +160,14 @@ class ArbitrageCalculator:
             if execution_time_seconds > 0
             else net_profit * self.cycles_per_hour
         )
-        score = profit_per_hour * confidence
+        trend_values = [
+            self.trend_by_currency[node]
+            for node in path[:-1]
+            if node in self.trend_by_currency
+        ]
+        trend_percent = sum(trend_values) / len(trend_values) if trend_values else 0.0
+        trend_factor = 1 + max(trend_percent, 0.0) / 100
+        score = profit_per_hour * confidence * trend_factor
         source = ", ".join(edge.source for edge in edges)
         stocks = [edge.observed_stock for edge in edges if edge.observed_stock is not None]
         max_size = min(stocks) if stocks else None
@@ -205,6 +214,7 @@ class ArbitrageCalculator:
             execution_time_seconds=execution_time_seconds,
             steps=steps,
             risk_reasons=risk_reasons,
+            trend_percent=trend_percent,
         )
         return replace(opportunity, strategy_types=classify_strategies(opportunity))
 

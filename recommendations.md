@@ -338,7 +338,7 @@ score =
 - [x] Stale-data penalty.
 - [x] OCR confidence penalty по конкретному ребру.
 - [x] Liquidity factor из observed stock/API-полей, если источник их передает.
-- [ ] Trend factor из poe.ninja/API в live opportunities.
+- [x] Trend factor из poe.ninja/API в live opportunities.
 - [x] Execution time estimate: clicks/steps per cycle.
 - [x] Profit/hour с учетом execution time, а не только `cycles_per_hour` вручную.
 - [x] Kill-switch: скрывать цепочки с отрицательным net после всех потерь.

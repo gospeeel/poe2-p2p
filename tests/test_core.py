@@ -189,6 +189,20 @@ class CalculatorTest(unittest.TestCase):
         self.assertIn(StrategyType.CURRENCY_TRIANGLE, triangle.strategy_types)
         self.assertIn(StrategyType.LIQUIDITY_FIRST, triangle.strategy_types)
 
+        trend_calculator = ArbitrageCalculator(
+            [
+                RateEdge("Exalted Orb", "Chaos Orb", 2.0, "test", observed_stock=20_000),
+                RateEdge("Chaos Orb", "Divine Orb", 2.0, "test", observed_stock=20_000),
+                RateEdge("Divine Orb", "Exalted Orb", 0.4, "test", observed_stock=20_000),
+            ],
+            cycles_per_hour=10,
+            trend_by_currency={"Chaos Orb": 12.0},
+        )
+        trend_opportunity = trend_calculator.find_cycles("Exalted Orb", 100, max_hops=3)[0]
+        self.assertGreater(trend_opportunity.trend_percent, 0)
+        self.assertIn(StrategyType.TREND_CONFIRMED, trend_opportunity.strategy_types)
+        self.assertGreater(trend_opportunity.score, trend_opportunity.profit_per_hour * trend_opportunity.confidence)
+
         family = first_cycle(
             [
                 RateEdge("Exalted Orb", "Rune A", 2.0, "test", observed_stock=100),
@@ -242,6 +256,7 @@ class UtilityTest(unittest.TestCase):
             csv_text = csv_path.read_text(encoding="utf-8")
             self.assertIn("net_profit", csv_text)
             self.assertIn("strategy_types", csv_text)
+            self.assertIn("trend_percent", csv_text)
             self.assertIn("Exalted Orb -> Omen", csv_text)
 
             alerts = filter_profit_alerts(profitable, min_net_profit=100, min_roi_percent=2)

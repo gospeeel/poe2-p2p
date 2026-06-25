@@ -470,6 +470,7 @@ class OverlayWindow(QMainWindow):
         self.filtered_opportunities: list[Opportunity] = []
         self.chain_scan_active = False
         self.chain_scan_steps: list[str] = []
+        self.candidate_trends: dict[str, float] = {}
         self.compact_mode = False
         self.settings = load_settings()
         self.icon_cache = IconCache()
@@ -1255,6 +1256,10 @@ class OverlayWindow(QMainWindow):
             self.status_label.setText("Кандидаты не найдены.")
             return
 
+        self.candidate_trends = {
+            candidate.name: candidate.seven_day_change_percent
+            for candidate in candidates
+        }
         lines = [
             "Кандидаты для проверки в NPC Currency Exchange",
             "",
@@ -1345,7 +1350,7 @@ class OverlayWindow(QMainWindow):
             return False
         starts = ("Exalted Orb", "Divine Orb", "Chaos Orb")
         input_amounts = {"Exalted Orb": 2050.0, "Divine Orb": 10.0, "Chaos Orb": 1000.0}
-        calculator = ArbitrageCalculator(self.live_rates)
+        calculator = ArbitrageCalculator(self.live_rates, trend_by_currency=self.candidate_trends)
         opportunities = []
         for start in starts:
             opportunities.extend(
@@ -1502,6 +1507,7 @@ class OverlayWindow(QMainWindow):
             f"Уверенность данных: {opportunity.confidence:.2f}\n"
             f"Возраст данных: {self._age_label(opportunity.age_seconds)}\n"
             f"Оценка объема: {opportunity.volume_score:.0f}\n"
+            f"Тренд: {opportunity.trend_percent:.1f}%\n"
             f"Максимальный размер: {'нет данных' if opportunity.max_size is None else f'{opportunity.max_size:.0f}'}\n"
             f"Шагов исполнения: {opportunity.execution_steps}\n"
             f"Время исполнения: {opportunity.execution_time_seconds:.1f} сек\n"
@@ -1566,6 +1572,7 @@ class OverlayWindow(QMainWindow):
                 f"Чистый профит: {opportunity.net_profit:.4f}",
                 f"Доходность: {opportunity.roi_percent:.2f}%",
                 f"Профит/ч: {opportunity.profit_per_hour:.4f}",
+                f"Тренд: {opportunity.trend_percent:.1f}%",
                 f"Время исполнения: {opportunity.execution_time_seconds:.1f} сек",
                 "",
                 "Экономический смысл:",
