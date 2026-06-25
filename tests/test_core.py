@@ -19,6 +19,7 @@ from poe2_p2p.calculator import ArbitrageCalculator
 from poe2_p2p.candidates import parse_poe_ninja_currency_rows, shortlist_candidates
 from poe2_p2p.config import CropRegion
 from poe2_p2p.dashboard import export_history_dashboard
+from poe2_p2p.diagnostics import run_diagnostics
 from poe2_p2p.exporter import export_opportunities_csv
 from poe2_p2p.icon_cache import IconCache
 from poe2_p2p.economic_strategies import classify_strategies
@@ -383,6 +384,16 @@ class UtilityTest(unittest.TestCase):
         self.assertTrue(status.checked)
         self.assertTrue(status.update_available)
         self.assertEqual(status.download_url, "https://example.test/setup.exe")
+
+    def test_diagnostics_report_writes_file(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "diagnostics.md"
+            report = run_diagnostics(report_path=path)
+            self.assertTrue(path.exists())
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("Диагностика POE2 P2P", text)
+            self.assertIn("Tesseract OCR", text)
+            self.assertEqual(report.report_path, path)
 
 
 class ConfigTest(unittest.TestCase):

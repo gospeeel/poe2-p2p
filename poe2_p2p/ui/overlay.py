@@ -52,6 +52,7 @@ from ..calibration import (
 from ..calculator import ArbitrageCalculator
 from ..capture import CaptureDependencyError, capture_screen_region, crop_image_file
 from ..config import DEFAULT_MARKET_RATIO_REGION, CropRegion
+from ..diagnostics import run_diagnostics
 from ..exporter import export_opportunities_csv
 from ..icon_cache import IconCache
 from ..logging_utils import LOG_DIR, LOG_FILE
@@ -910,11 +911,19 @@ class OverlayWindow(QMainWindow):
         logs_button = QPushButton("Открыть логи")
         logs_button.clicked.connect(self.open_logs)
         self._delayed_tip(logs_button, "Открыть папку с файлом журнала ошибок.")
+        diagnostics_button = QPushButton("Диагностика")
+        diagnostics_button.clicked.connect(self.run_diagnostics)
+        self._delayed_tip(
+            diagnostics_button,
+            "Создать отчет о запуске, Tesseract, калибровке, снимке экрана и OCR. "
+            "Этот отчет нужен для проверки оставшихся Windows и живых пунктов.",
+        )
         layout.addWidget(text)
         layout.addWidget(button)
         layout.addWidget(update_button)
         layout.addWidget(first_run_button)
         layout.addWidget(logs_button)
+        layout.addWidget(diagnostics_button)
         layout.addStretch(1)
         self._delayed_tip(tab, "Раздел настроек приложения: бинды, OCR, внешний вид и профиль игры.")
         self.tabs.addTab(tab, "Настройки")
@@ -1223,6 +1232,12 @@ class OverlayWindow(QMainWindow):
             LOG_FILE.write_text("Лог пока пуст.\n", encoding="utf-8")
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(LOG_DIR.resolve())))
         self.status_label.setText(f"Папка логов: {LOG_DIR.resolve()}")
+
+    def run_diagnostics(self) -> None:
+        report = run_diagnostics(live_capture=True)
+        self.ocr_debug_view.setPlainText(report.text)
+        self.tabs.setCurrentWidget(self.ocr_debug_view)
+        self.status_label.setText(f"Диагностика завершена. Отчет: {report.report_path}")
 
     def scan_pair(self) -> None:
         self.clear_error()

@@ -8,6 +8,7 @@ from .calculator import ArbitrageCalculator
 from .calibration import load_region, save_region
 from .config import DEFAULT_MARKET_RATIO_REGION, CropRegion
 from .dashboard import export_history_dashboard
+from .diagnostics import run_diagnostics
 from .exporter import export_opportunities_csv
 from .icon_cache import cache_poe_ninja_icons
 from .logging_utils import configure_logging
@@ -138,6 +139,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cache-icons", action="store_true", help="Download poe.ninja icons into local cache")
     parser.add_argument("--icon-cache-dir", default="icon_cache")
     parser.add_argument("--check-update", action="store_true", help="Check GitHub Releases for updates")
+    parser.add_argument("--diagnostics", action="store_true", help="Запустить диагностику и сохранить отчет")
+    parser.add_argument("--diagnostics-live", action="store_true", help="Проверить живой снимок экрана и OCR")
+    parser.add_argument("--diagnostics-output", default=None, help="Путь к отчету диагностики")
     parser.add_argument("--min-volume", type=float, default=0.0)
     parser.add_argument("--validate-rate", type=float, default=None, help="Observed rate to validate")
     parser.add_argument("--expected-rate", type=float, default=None, help="Expected rate for --validate-rate")
@@ -208,6 +212,15 @@ def main(argv: list[str] | None = None) -> int:
         if status.download_url:
             print(status.download_url)
         return 0 if status.checked else 2
+
+    if args.diagnostics:
+        report = run_diagnostics(
+            live_capture=args.diagnostics_live,
+            report_path=args.diagnostics_output,
+        )
+        print(report.text)
+        print(f"\nОтчет сохранен: {report.report_path}")
+        return 0 if report.ok else 4
 
     if args.validate_rate is not None:
         if args.expected_rate is None:

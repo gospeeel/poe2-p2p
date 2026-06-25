@@ -235,6 +235,7 @@ dist/POE2-P2P/POE2-P2P.exe
 - [x] Auto-update check через GitHub Releases.
 - [x] First-run wizard: Tesseract status, calibration, hotkeys, league.
 - [x] Crash/error log file и кнопка открыть logs.
+- [x] Диагностический отчет запуска для проверки Windows и живого окружения.
 
 ## Экономическая выгодность
 

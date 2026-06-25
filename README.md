@@ -37,6 +37,34 @@ Install
 Launch POE2 P2P from Start Menu or Desktop shortcut
 ```
 
+## Диагностика на Windows
+
+После установки открой приложение и нажми:
+
+```text
+Настройки -> Диагностика
+```
+
+Приложение создаст отчет в папке `logs`. В отчете проверяются:
+
+- доступность Tesseract OCR;
+- наличие калибровки;
+- возможность записи логов;
+- живой снимок области `Market Ratio`;
+- OCR живого снимка, если область калибровки настроена.
+
+То же самое можно запустить из PowerShell:
+
+```powershell
+.\POE2-P2P.exe --diagnostics --diagnostics-live
+```
+
+Если проверка нужна без живого снимка:
+
+```powershell
+.\POE2-P2P.exe --diagnostics
+```
+
 Developer/manual setup after copying the project folder to a Windows PC:
 
 1. Install Tesseract OCR.
