@@ -290,12 +290,14 @@ class UtilityTest(unittest.TestCase):
             settings.hotkeys["scan_pair"] = "Ctrl+1"
             settings.hotkeys["toggle_overlay"] = "Ctrl+H"
             settings.opacity = 88
+            settings.click_through = True
             settings.first_run_complete = True
             settings.league = "Test League"
             save_settings(settings, path)
 
             loaded = load_settings(path)
             self.assertEqual(loaded.opacity, 88)
+            self.assertTrue(loaded.click_through)
             self.assertEqual(loaded.hotkeys["scan_pair"], "Ctrl+1")
             self.assertTrue(loaded.first_run_complete)
             self.assertEqual(loaded.league, "Test League")

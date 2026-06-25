@@ -470,6 +470,15 @@ class OverlayWindow(QMainWindow):
             "Отключи, если мешает другим окнам.",
         )
 
+        self.click_through = QCheckBox("Клики сквозь")
+        self.click_through.setChecked(self.settings.click_through)
+        self.click_through.stateChanged.connect(self.toggle_click_through)
+        self._delayed_tip(
+            self.click_through,
+            "Если включено, мышь проходит через окно приложения в игру. "
+            "Выключить обратно можно через значок приложения в трее.",
+        )
+
         self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
         self.opacity_slider.setRange(70, 100)
         self.opacity_slider.setValue(self.settings.opacity)
@@ -489,6 +498,7 @@ class OverlayWindow(QMainWindow):
 
         layout.addLayout(title_box, 1)
         layout.addWidget(self.always_on_top)
+        layout.addWidget(self.click_through)
         layout.addWidget(QLabel("Прозрачность"))
         layout.addWidget(self.opacity_slider)
         layout.addWidget(settings_button)
@@ -809,16 +819,22 @@ class OverlayWindow(QMainWindow):
         show_action.triggered.connect(self.showNormal)
         hide_action = QAction("Скрыть", self)
         hide_action.triggered.connect(self.hide)
+        self.click_through_action = QAction("Клики сквозь", self)
+        self.click_through_action.setCheckable(True)
+        self.click_through_action.setChecked(self.settings.click_through)
+        self.click_through_action.triggered.connect(self.set_click_through)
         exit_action = QAction("Выход", self)
         exit_action.triggered.connect(QApplication.instance().quit)
         menu.addAction(show_action)
         menu.addAction(hide_action)
+        menu.addAction(self.click_through_action)
         menu.addSeparator()
         menu.addAction(exit_action)
         self.tray.setContextMenu(menu)
         self.tray.setToolTip("POE2 P2P")
         self.tray.activated.connect(self._tray_activated)
         self.tray.show()
+        self._apply_click_through()
 
     def _install_shortcuts(self) -> None:
         QShortcut("Esc", self, activated=self.close)
@@ -963,6 +979,31 @@ class OverlayWindow(QMainWindow):
             flags &= ~Qt.WindowType.WindowStaysOnTopHint
         self.setWindowFlags(flags)
         self.show()
+
+    def toggle_click_through(self) -> None:
+        self.set_click_through(self.click_through.isChecked())
+
+    def set_click_through(self, enabled: bool) -> None:
+        self.settings.click_through = bool(enabled)
+        self._sync_checked(self.click_through, enabled)
+        if hasattr(self, "click_through_action"):
+            self._sync_checked(self.click_through_action, enabled)
+        self._apply_click_through()
+        save_settings(self.settings)
+        self.status_label.setText(
+            "Клики сквозь включены. Выключить можно через значок в трее."
+            if enabled
+            else "Клики сквозь выключены."
+        )
+
+    def _apply_click_through(self) -> None:
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, self.settings.click_through)
+
+    @staticmethod
+    def _sync_checked(widget, enabled: bool) -> None:
+        previous = widget.blockSignals(True)
+        widget.setChecked(enabled)
+        widget.blockSignals(previous)
 
     def update_opacity(self, value: int) -> None:
         self.settings.opacity = value
