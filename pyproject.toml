@@ -1,6 +1,6 @@
 [project]
 name = "poe2-p2p"
-version = "0.2.0"
+version = "0.2.1"
 description = "Lightweight POE2 currency exchange arbitrage overlay prototype"
 requires-python = ">=3.11"
 dependencies = [
