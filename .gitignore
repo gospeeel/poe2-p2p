@@ -1,17 +1,52 @@
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
 .venv/
 venv/
+env/
+
+# Build artifacts
 build/
 dist/
 installer_output/
-icon_cache/
+*.spec.bak
+
+# Local app state
 settings.json
 calibration.json
-_calibration_preview.png
+icon_cache/
 logs/
+*.log
 *.db
 *.sqlite
 *.sqlite3
+_calibration_preview.png
+ratio_crop*.png
+
+# Local validation/debug captures
+Screenshot_*.jpg
+Screenshot_*.jpeg
+Screenshot_*.png
+screenshots/
+debug_crops/
+captures/
+
+# Developer-only project context
+.agents/
+.codex/
+
+# Optional local tests; keep out of user source snapshots if removed from Git tracking.
+tests/
+
+# Windows metadata
 *:Zone.Identifier
+Thumbs.db
+desktop.ini
