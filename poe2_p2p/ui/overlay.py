@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QRubberBand,
     QSizeGrip,
-    QSlider,
     QSpinBox,
     QStyle,
     QSystemTrayIcon,
@@ -254,14 +253,28 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle("Настройки")
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(460)
         layout = QVBoxLayout(self)
 
-        hint = QLabel("Бинды сохраняются локально. Глобальная обработка поверх игры будет подключена следующим этапом.")
+        hint = QLabel("Настройки overlay, биндов и служебных проверок.")
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
         form = QFormLayout()
+        self.always_on_top_input = QCheckBox("Окно остается поверх POE2")
+        self.always_on_top_input.setChecked(settings.always_on_top)
+        form.addRow("Поверх игры", self.always_on_top_input)
+
+        self.click_through_input = QCheckBox("Мышь проходит через overlay в игру")
+        self.click_through_input.setChecked(settings.click_through)
+        form.addRow("Клики сквозь", self.click_through_input)
+
+        self.opacity_input = QSpinBox()
+        self.opacity_input.setRange(70, 100)
+        self.opacity_input.setSuffix("%")
+        self.opacity_input.setValue(settings.opacity)
+        form.addRow("Прозрачность", self.opacity_input)
+
         self.hotkey_inputs: dict[str, QLineEdit] = {}
         for action, label in ACTION_LABELS.items():
             edit = QLineEdit(settings.hotkeys.get(action, ""))
@@ -282,6 +295,20 @@ class SettingsDialog(QDialog):
         self.conflict_label.hide()
         layout.addWidget(self.conflict_label)
 
+        if parent is not None:
+            tools = QHBoxLayout()
+            for label, method_name in [
+                ("Калибровка", "open_calibration"),
+                ("Диагностика", "run_diagnostics"),
+                ("Логи", "open_logs"),
+                ("Обновления", "check_updates"),
+            ]:
+                if hasattr(parent, method_name):
+                    button = QPushButton(label)
+                    button.clicked.connect(getattr(parent, method_name))
+                    tools.addWidget(button)
+            layout.addLayout(tools)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Save).setText("Сохранить")
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Отмена")
@@ -299,6 +326,9 @@ class SettingsDialog(QDialog):
             return
         self.settings.hotkeys = hotkeys
         self.settings.ui_scale_percent = self.ui_scale_input.value()
+        self.settings.always_on_top = self.always_on_top_input.isChecked()
+        self.settings.click_through = self.click_through_input.isChecked()
+        self.settings.opacity = self.opacity_input.value()
         super().accept()
 
 
@@ -318,8 +348,8 @@ class CalibrationDialog(QDialog):
         layout = QVBoxLayout(self)
 
         hint = QLabel(
-            "Укажи области NPC Currency Exchange. Нажми `Проверить`, чтобы увидеть crop, "
-            "и `OCR`, чтобы проверить распознавание Market Ratio."
+            "Открой NPC Currency Exchange в игре и укажи область Market Ratio. "
+            "Кнопки проверки снимают область прямо с экрана; файл нужен только для разработки."
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -338,14 +368,21 @@ class CalibrationDialog(QDialog):
         profile_form.addRow("Масштаб UI игры", self.profile_scale)
         layout.addLayout(profile_form)
 
-        file_row = QHBoxLayout()
+        self.use_file_input = QCheckBox("Использовать файл скриншота для разработки")
+        self.use_file_input.toggled.connect(self.toggle_file_input)
+        layout.addWidget(self.use_file_input)
+
+        self.file_widget = QWidget()
+        file_row = QHBoxLayout(self.file_widget)
+        file_row.setContentsMargins(0, 0, 0, 0)
         self.image_path = QLineEdit("Screenshot_1.jpg")
         browse = QPushButton("Файл")
         browse.clicked.connect(self.choose_file)
         file_row.addWidget(QLabel("Скриншот"))
         file_row.addWidget(self.image_path, 1)
         file_row.addWidget(browse)
-        layout.addLayout(file_row)
+        layout.addWidget(self.file_widget)
+        self.file_widget.hide()
 
         form = QFormLayout()
         self.region_selector = QComboBox()
@@ -382,7 +419,7 @@ class CalibrationDialog(QDialog):
             "выдели прямоугольник нужной области и отпусти кнопку."
         )
         select_button.installEventFilter(self.tooltip_filter)
-        preview_button = QPushButton("Проверить")
+        preview_button = QPushButton("Проверить из игры")
         preview_button.clicked.connect(self.update_preview)
         ocr_button = QPushButton("Распознать")
         ocr_button.clicked.connect(self.run_ocr)
@@ -397,24 +434,30 @@ class CalibrationDialog(QDialog):
     def choose_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "Выбери скриншот",
+            "Выбери скриншот для разработки",
             "",
             "Изображения (*.png *.jpg *.jpeg *.webp)",
         )
         if path:
             self.image_path.setText(path)
 
+    def toggle_file_input(self, checked: bool) -> None:
+        self.file_widget.setVisible(checked)
+        source = "файл скриншота" if checked else "живой экран"
+        self.result.setText(f"Источник проверки: {source}.")
+
     def update_preview(self) -> None:
         region = self._region_from_inputs()
         output = "_calibration_preview.png"
         try:
-            crop_image_file(self.image_path.text(), region, output)
+            self._capture_calibration_preview(region, output)
         except (CaptureDependencyError, ValueError, FileNotFoundError) as error:
-            self.result.setText(f"Не удалось сделать crop: {error}")
+            self.result.setText(f"Не удалось получить область: {error}")
             return
         pixmap = QPixmap(output)
         self.preview.setPixmap(pixmap.scaled(260, 80, Qt.AspectRatioMode.KeepAspectRatio))
-        self.result.setText(f"Область: {region.x},{region.y},{region.width},{region.height}")
+        source = "скриншот" if self.use_file_input.isChecked() else "экран игры"
+        self.result.setText(f"Источник: {source}. Область: {region.x},{region.y},{region.width},{region.height}")
 
     def run_ocr(self) -> None:
         self.update_preview()
@@ -431,6 +474,12 @@ class CalibrationDialog(QDialog):
             f"Курс: {left:g} : {right:g}\n"
             f"Уверенность: {result.confidence:.2f}"
         )
+
+    def _capture_calibration_preview(self, region: CropRegion, output: str) -> None:
+        if self.use_file_input.isChecked():
+            crop_image_file(self.image_path.text(), region, output)
+            return
+        capture_screen_region(region, output)
 
     def accept(self) -> None:
         self._store_current_region()
@@ -545,17 +594,18 @@ class OverlayWindow(QMainWindow):
         self.chain_scan_steps: list[str] = []
         self.candidate_trends: dict[str, float] = {}
         self.compact_mode = False
+        self.filters_expanded = False
         self.settings = load_settings()
         self.icon_cache = IconCache()
+        self.missing_icon_downloads: set[str] = set()
         self.paused = False
         self.tooltip_filter = DelayedToolTipFilter()
         self.setWindowTitle("POE2 P2P")
         self.setWindowIcon(self._build_icon())
-        self.setWindowFlags(
-            Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.Tool
-            | Qt.WindowType.FramelessWindowHint
-        )
+        flags = Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
+        if self.settings.always_on_top:
+            flags |= Qt.WindowType.WindowStaysOnTopHint
+        self.setWindowFlags(flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setMinimumSize(760, 260)
         self.resize(1120, 420)
@@ -591,43 +641,18 @@ class OverlayWindow(QMainWindow):
 
         title = QLabel(f"POE2 P2P v{__version__}")
         title.setObjectName("title")
-        subtitle = QLabel("Источник: пример со скриншотов | Последнее обновление: сейчас")
+        subtitle = QLabel("Источник: live scan / кеш кандидатов | Последнее обновление: сейчас")
         subtitle.setObjectName("subtitle")
         subtitle.installEventFilter(self.tooltip_filter)
         subtitle.setToolTip(
-            "Пока таблица использует тестовые курсы со скриншотов. "
-            "Сканирование игры будет подключено следующим этапом."
+            "Кнопка `Скан пары` снимает текущую область Market Ratio с экрана. "
+            "Стартовые строки нужны только как пример до первого live scan."
         )
 
         title_box = QVBoxLayout()
         title_box.setSpacing(1)
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
-
-        self.always_on_top = QCheckBox("Поверх игры")
-        self.always_on_top.setChecked(self.settings.always_on_top)
-        self.always_on_top.stateChanged.connect(self.toggle_always_on_top)
-        self._delayed_tip(
-            self.always_on_top,
-            "Если включено, окно остается поверх POE2. "
-            "Отключи, если мешает другим окнам.",
-        )
-
-        self.click_through = QCheckBox("Клики сквозь")
-        self.click_through.setChecked(self.settings.click_through)
-        self.click_through.stateChanged.connect(self.toggle_click_through)
-        self._delayed_tip(
-            self.click_through,
-            "Если включено, мышь проходит через окно приложения в игру. "
-            "Выключить обратно можно через значок приложения в трее.",
-        )
-
-        self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
-        self.opacity_slider.setRange(70, 100)
-        self.opacity_slider.setValue(self.settings.opacity)
-        self.opacity_slider.setFixedWidth(110)
-        self.opacity_slider.valueChanged.connect(self.update_opacity)
-        self._delayed_tip(self.opacity_slider, "Прозрачность окна: 70-100%.")
 
         settings_button = self._button("Настройки", self.open_settings)
         compact_button = self._button("Компактно", self.toggle_compact_mode)
@@ -640,10 +665,6 @@ class OverlayWindow(QMainWindow):
         close_button.setObjectName("dangerButton")
 
         layout.addLayout(title_box, 1)
-        layout.addWidget(self.always_on_top)
-        layout.addWidget(self.click_through)
-        layout.addWidget(QLabel("Прозрачность"))
-        layout.addWidget(self.opacity_slider)
         layout.addWidget(settings_button)
         layout.addWidget(compact_button)
         layout.addWidget(minimize_button)
@@ -659,6 +680,7 @@ class OverlayWindow(QMainWindow):
         actions = [
             ("Скан пары", self.scan_pair, QStyle.StandardPixmap.SP_BrowserReload, "Снять текущий Market Ratio из окна NPC Currency Exchange."),
             ("Скан цепочки", self.scan_chain, QStyle.StandardPixmap.SP_ArrowForward, "Проверить несколько шагов связки, например Exalted -> Item -> Divine -> Exalted."),
+            ("Фильтры", self.toggle_filters, QStyle.StandardPixmap.SP_FileDialogListView, "Показать или скрыть расширенные фильтры связок."),
             ("Калибровка", self.open_calibration, QStyle.StandardPixmap.SP_FileDialogDetailedView, "Настроить область экрана, из которой OCR читает Market Ratio."),
             ("Кандидаты", self.refresh_candidates, QStyle.StandardPixmap.SP_FileDialogContentsView, "Обновить список валют и предметов, которые стоит проверить первыми."),
             ("Экспорт", self.export_opportunities, QStyle.StandardPixmap.SP_DialogSaveButton, "Сохранить найденные возможности в CSV или отчет."),
@@ -778,9 +800,10 @@ class OverlayWindow(QMainWindow):
             layout.addWidget(widget)
         layout.addStretch(1)
         self.layout.addWidget(bar)
+        bar.hide()
 
     def _build_status(self) -> None:
-        self.status_label = QLabel("Готово. Используются тестовые данные; сканирование игры еще не подключено.")
+        self.status_label = QLabel("Готово. Открой NPC Currency Exchange и нажми `Скан пары`.")
         self.status_label.setObjectName("status")
         self._delayed_tip(
             self.status_label,
@@ -848,14 +871,14 @@ class OverlayWindow(QMainWindow):
     def _build_auxiliary_tabs(self) -> None:
         self.live_scan_view = self._text_tab(
             "Скан",
-            "Скан игры еще не подключен.\n\n"
-            "Здесь будет текущий снимок области, исходный OCR-текст, распознанный курс и результат проверки.",
+            "Открой NPC Currency Exchange в игре и нажми `Скан пары`.\n\n"
+            "Здесь появится OCR-текст, распознанный курс, названия сторон и результат пересчета.",
             "Сканирование показывает, что приложение реально прочитало из окна NPC Currency Exchange.",
         )
         self.candidates_view = self._text_tab(
             "Кандидаты",
-            "Кандидаты пока обновляются через командную строку.\n\n"
-            "Следующий шаг: вывести здесь валюты и предметы с высокой оценкой объема и трендом.",
+            "Нажми `Кандидаты`, чтобы обновить список через poe.ninja/API.\n\n"
+            "Здесь появятся валюты и предметы с высокой оценкой объема, трендом и spread.",
             "Кандидаты - это список валют и предметов, которые стоит проверить в NPC первыми.",
         )
         self.history_view = self._text_tab(
@@ -868,7 +891,6 @@ class OverlayWindow(QMainWindow):
             "Выбери связку в таблице, чтобы увидеть расчет по шагам.",
             "Разбор показывает, какой курс использовался на каждом шаге и откуда берется итоговый профит.",
         )
-        self.settings_view = self._settings_tab()
         self.ocr_debug_view = self._text_tab(
             "OCR",
             "Отладка OCR пока доступна через калибровку.\n\n"
@@ -1111,21 +1133,29 @@ class OverlayWindow(QMainWindow):
         self.apply_filters()
         self.status_label.setText("Компактный режим включен." if self.compact_mode else "Полный режим включен.")
 
+    def toggle_filters(self) -> None:
+        self.filters_expanded = not self.filters_expanded
+        self.filter_bar.setVisible(self.filters_expanded and not self.compact_mode)
+        self.status_label.setText("Фильтры показаны." if self.filters_expanded else "Фильтры скрыты.")
+
     def _apply_compact_layout(self) -> None:
         compact_hidden_columns = {2, 3, 4, 5, 9, 10, 11, 12, 13}
         for column in range(self.table.columnCount()):
             self.table.setColumnHidden(column, self.compact_mode and column in compact_hidden_columns)
         self.table.horizontalHeader().setVisible(not self.compact_mode)
         self.tabs.tabBar().setVisible(not self.compact_mode)
-        self.filter_bar.setVisible(not self.compact_mode)
+        self.filter_bar.setVisible(self.filters_expanded and not self.compact_mode)
         if self.compact_mode:
             self.tabs.setCurrentWidget(self.opportunities_tab)
 
     def toggle_always_on_top(self) -> None:
-        self.settings.always_on_top = self.always_on_top.isChecked()
+        self.set_always_on_top(not self.settings.always_on_top)
+
+    def set_always_on_top(self, enabled: bool) -> None:
+        self.settings.always_on_top = bool(enabled)
         save_settings(self.settings)
         flags = self.windowFlags()
-        if self.always_on_top.isChecked():
+        if self.settings.always_on_top:
             flags |= Qt.WindowType.WindowStaysOnTopHint
         else:
             flags &= ~Qt.WindowType.WindowStaysOnTopHint
@@ -1133,11 +1163,12 @@ class OverlayWindow(QMainWindow):
         self.show()
 
     def toggle_click_through(self) -> None:
-        self.set_click_through(self.click_through.isChecked())
+        self.set_click_through(not self.settings.click_through)
 
     def set_click_through(self, enabled: bool) -> None:
         self.settings.click_through = bool(enabled)
-        self._sync_checked(self.click_through, enabled)
+        if hasattr(self, "click_through"):
+            self._sync_checked(self.click_through, enabled)
         if hasattr(self, "click_through_action"):
             self._sync_checked(self.click_through_action, enabled)
         self._apply_click_through()
@@ -1202,6 +1233,9 @@ class OverlayWindow(QMainWindow):
         dialog.setStyleSheet(self.styleSheet())
         if dialog.exec() == QDialog.DialogCode.Accepted:
             save_settings(self.settings)
+            self.setWindowOpacity(self.settings.opacity / 100)
+            self.set_always_on_top(self.settings.always_on_top)
+            self.set_click_through(self.settings.click_through)
             self._apply_ui_scale()
             self.apply_filters()
             self.status_label.setText("Настройки сохранены.")
@@ -1347,6 +1381,12 @@ class OverlayWindow(QMainWindow):
             candidate.name: candidate.seven_day_change_percent
             for candidate in candidates
         }
+        try:
+            cached_icons = self.icon_cache.cache_candidates(candidates)
+        except RuntimeError:
+            cached_icons = 0
+        except Exception:
+            cached_icons = 0
         lines = [
             "Кандидаты для проверки в NPC Currency Exchange",
             "",
@@ -1361,7 +1401,7 @@ class OverlayWindow(QMainWindow):
             )
         self.candidates_view.setPlainText("\n".join(lines))
         self.tabs.setCurrentWidget(self.candidates_view)
-        self.status_label.setText(f"Кандидаты обновлены: {len(candidates)} позиций.")
+        self.status_label.setText(f"Кандидаты обновлены: {len(candidates)} позиций, новых иконок: {cached_icons}.")
 
     def export_opportunities(self) -> None:
         rows = self.filtered_opportunities or self.opportunities
@@ -1556,6 +1596,18 @@ class OverlayWindow(QMainWindow):
         cached = self.icon_cache.cached_icon_path(name)
         if cached:
             return QIcon(str(cached))
+        if name not in self.missing_icon_downloads:
+            try:
+                self.icon_cache.cache_static_icons([name])
+            except RuntimeError:
+                self.missing_icon_downloads.add(name)
+            except Exception:
+                self.missing_icon_downloads.add(name)
+            else:
+                cached = self.icon_cache.cached_icon_path(name)
+                if cached:
+                    return QIcon(str(cached))
+                self.missing_icon_downloads.add(name)
         color, text = ICON_COLORS.get(name, ("#6f7b88", "IT"))
         pixmap = QPixmap(28, 28)
         pixmap.fill(Qt.GlobalColor.transparent)
