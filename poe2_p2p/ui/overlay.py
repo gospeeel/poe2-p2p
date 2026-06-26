@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import os
+import time
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -402,7 +403,7 @@ class CalibrationDialog(QDialog):
 
         self.preview = QLabel("Предпросмотр появится после проверки.")
         self.preview.setObjectName("empty")
-        self.preview.setMinimumHeight(72)
+        self.preview.setMinimumHeight(120)
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.preview)
 
@@ -455,7 +456,7 @@ class CalibrationDialog(QDialog):
             self.result.setText(f"Не удалось получить область: {error}")
             return
         pixmap = QPixmap(output)
-        self.preview.setPixmap(pixmap.scaled(260, 80, Qt.AspectRatioMode.KeepAspectRatio))
+        self.preview.setPixmap(pixmap.scaled(420, 120, Qt.AspectRatioMode.KeepAspectRatio))
         source = "скриншот" if self.use_file_input.isChecked() else "экран игры"
         self.result.setText(f"Источник: {source}. Область: {region.x},{region.y},{region.width},{region.height}")
 
@@ -479,7 +480,21 @@ class CalibrationDialog(QDialog):
         if self.use_file_input.isChecked():
             crop_image_file(self.image_path.text(), region, output)
             return
-        capture_screen_region(region, output)
+        parent = self.parentWidget()
+        parent_was_visible = bool(parent and parent.isVisible())
+        self.hide()
+        if parent_was_visible:
+            parent.hide()
+        QApplication.processEvents()
+        time.sleep(0.35)
+        try:
+            capture_screen_region(region, output)
+        finally:
+            if parent_was_visible:
+                parent.show()
+            self.show()
+            self.raise_()
+            QApplication.processEvents()
 
     def accept(self) -> None:
         self._store_current_region()
@@ -827,31 +842,27 @@ class OverlayWindow(QMainWindow):
         opportunities_layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(15)
+        self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels(
             [
                 "Иконки",
                 "Маршрут",
-                "Тип",
-                "Стратегия",
                 "Вход",
                 "Выход",
                 "Профит",
                 "Доходность",
                 "Профит/ч",
-                "Уверенность",
-                "Возраст",
-                "Объем",
-                "Размер",
-                "Шаги",
                 "Риск",
             ]
         )
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.setIconSize(QSize(128, 24))
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.setIconSize(QSize(220, 40))
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
@@ -1072,18 +1083,11 @@ class OverlayWindow(QMainWindow):
             values = [
                 "",
                 self._path_label(opportunity),
-                CHAIN_TYPE_LABELS.get(opportunity.chain_type, "неизвестно"),
-                opportunity.strategy_label,
                 f"{opportunity.input_amount:.2f} {self._alias(opportunity.input_currency)}",
                 f"{opportunity.output_amount:.2f} {self._alias(opportunity.input_currency)}",
                 f"{opportunity.net_profit:.2f}",
                 f"{opportunity.roi_percent:.2f}%",
                 f"{opportunity.profit_per_hour:.2f}",
-                f"{opportunity.confidence:.2f}",
-                self._age_label(opportunity.age_seconds),
-                f"{opportunity.volume_score:.0f}",
-                "нет данных" if opportunity.max_size is None else f"{opportunity.max_size:.0f}",
-                str(opportunity.execution_steps),
                 RISK_LABELS.get(opportunity.risk, opportunity.risk),
             ]
             for column, value in enumerate(values):
@@ -1091,13 +1095,13 @@ class OverlayWindow(QMainWindow):
                 item.setData(Qt.ItemDataRole.UserRole, self._opportunity_tooltip(opportunity))
                 if column == 0:
                     item.setIcon(self._route_icon(opportunity))
-                if column in {6, 7} and opportunity.net_profit > 0:
+                if column in {4, 5} and opportunity.net_profit > 0:
                     item.setForeground(QColor("#4bd16f"))
-                if column == 14 and opportunity.risk == "high":
+                if column == 7 and opportunity.risk == "high":
                     item.setForeground(QColor("#ff6b6b"))
                 self.table.setItem(row, column, item)
-            base_height = 24 if self.compact_mode else 34
-            self.table.setRowHeight(row, max(22, int(base_height * self._ui_scale())))
+            base_height = 32 if self.compact_mode else 48
+            self.table.setRowHeight(row, max(30, int(base_height * self._ui_scale())))
         if opportunities:
             self.table.selectRow(0)
         else:
@@ -1139,7 +1143,7 @@ class OverlayWindow(QMainWindow):
         self.status_label.setText("Фильтры показаны." if self.filters_expanded else "Фильтры скрыты.")
 
     def _apply_compact_layout(self) -> None:
-        compact_hidden_columns = {2, 3, 4, 5, 9, 10, 11, 12, 13}
+        compact_hidden_columns = {2, 3, 6}
         for column in range(self.table.columnCount()):
             self.table.setColumnHidden(column, self.compact_mode and column in compact_hidden_columns)
         self.table.horizontalHeader().setVisible(not self.compact_mode)
@@ -1210,7 +1214,7 @@ class OverlayWindow(QMainWindow):
         header_font.setPointSizeF(9 * scale)
         self.table.horizontalHeader().setFont(header_font)
 
-        self.table.setIconSize(QSize(max(96, int(128 * scale)), max(20, int(24 * scale))))
+        self.table.setIconSize(QSize(max(180, int(220 * scale)), max(34, int(40 * scale))))
 
     def hide_to_tray(self) -> None:
         self.hide()
@@ -1570,10 +1574,10 @@ class OverlayWindow(QMainWindow):
 
     def _route_icon(self, opportunity: Opportunity) -> QIcon:
         scale = self._ui_scale()
-        size = max(18, int(22 * scale))
-        gap = max(3, int(4 * scale))
-        width = min(len(opportunity.path) * (size + gap), 160)
-        height = max(22, int(24 * scale))
+        size = max(30, int(36 * scale))
+        gap = max(5, int(7 * scale))
+        width = min(len(opportunity.path) * (size + gap), 240)
+        height = max(36, int(42 * scale))
         pixmap = QPixmap(width, height)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
@@ -1609,16 +1613,16 @@ class OverlayWindow(QMainWindow):
                     return QIcon(str(cached))
                 self.missing_icon_downloads.add(name)
         color, text = ICON_COLORS.get(name, ("#6f7b88", "IT"))
-        pixmap = QPixmap(28, 28)
+        pixmap = QPixmap(40, 40)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setBrush(QColor(color))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(1, 1, 26, 26)
+        painter.drawEllipse(2, 2, 36, 36)
         painter.setPen(QColor("#101316"))
         font = QFont()
-        font.setPointSize(7)
+        font.setPointSize(9)
         font.setBold(True)
         painter.setFont(font)
         painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, text)

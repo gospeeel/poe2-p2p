@@ -141,8 +141,10 @@ dist/POE2-P2P/POE2-P2P.exe
 - [x] Скрыть расширенные фильтры по умолчанию за кнопкой `Фильтры`.
 - [x] Убрать дублирование вкладки `Настройки`; оставить единый settings dialog.
 - [x] Перенести `always on top`, `click-through` и прозрачность из верхней панели в settings dialog.
+- [x] При live preview/OCR временно прятать overlay, чтобы не захватывать интерфейс приложения вместо игры.
+- [x] Сократить таблицу в основном режиме до: маршрут, вход, выход, net profit, ROI, profit/hour, risk.
+- [x] Убрать `confidence`, `age`, `type`, `strategy`, `volume`, `steps` из основного вида в tooltip/`Разбор`.
 - [ ] Сверстать production top bar: крупный profit signal, last scan status, 2-3 primary actions, остальное в menus.
-- [ ] Сократить таблицу в основном режиме до: маршрут, вход, выход, net profit, ROI, confidence/risk; детали в `Разбор`.
 - [ ] Сделать отдельный `Advanced` режим для research-фильтров и полного набора колонок.
 - [ ] Проверить читаемость на 1080p/1440p/4K и в окне поверх POE2.
 
@@ -208,6 +210,7 @@ dist/POE2-P2P/POE2-P2P.exe
 
 - [x] Настоящие иконки валют в каждом узле маршрута из локального кеша poe.ninja/API, fallback для неизвестных items.
 - [x] Автокеш реальных иконок ключевых валют: Exalted, Divine, Chaos, Omen of Whittling.
+- [x] Увеличить область route icons в таблице для читаемости.
 - [ ] Расширить автокеш реальных иконок на Regal, Alchemy, Vaal, основные Omens/Runes/Essences.
 - [ ] Проверить источник и лицензирование ассетов перед упаковкой в installer; poe.ninja/API cache предпочтительнее ручного копирования с сайтов.
 - [x] Компактная строка маршрута с иконками `Exalted -> Omen -> Divine -> Exalted` и раскрытием полного названия по tooltip.
