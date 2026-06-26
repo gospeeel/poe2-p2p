@@ -1,5 +1,5 @@
 #define MyAppName "POE2 P2P"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.2.0"
 #define MyAppPublisher "gospeeel"
 #define MyAppExeName "POE2-P2P.exe"
 
