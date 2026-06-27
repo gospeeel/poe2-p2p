@@ -67,11 +67,13 @@ from ..models import (
     StrategyType,
 )
 from ..ocr import OCRDependencyError, detect_tesseract_cmd, read_ratio_from_image, read_text_from_image
-from ..poe_ninja import fetch_currency_candidates
+from ..candidates import shortlist_candidates
+from ..poe_ninja import fetch_all_currency_candidates
 from ..presets import STRATEGY_PRESETS
 from ..settings import ACTION_LABELS, AppSettings, find_hotkey_conflicts, load_settings, save_settings
 from ..storage import SQLiteStore
 from ..updater import check_for_updates
+from ..valuation import build_valuation_edges, merge_valuation_edges, value_amounts
 
 
 ALIASES = {
@@ -612,7 +614,6 @@ class OverlayWindow(QMainWindow):
         self.filters_expanded = False
         self.settings = load_settings()
         self.icon_cache = IconCache()
-        self.missing_icon_downloads: set[str] = set()
         self.paused = False
         self.tooltip_filter = DelayedToolTipFilter()
         self.setWindowTitle("POE2 P2P")
@@ -756,17 +757,17 @@ class OverlayWindow(QMainWindow):
 
         self.min_profit_filter = QDoubleSpinBox()
         self.min_profit_filter.setRange(0, 1_000_000)
-        self.min_profit_filter.setDecimals(0)
-        self.min_profit_filter.setPrefix("Профит ")
+        self.min_profit_filter.setDecimals(2)
+        self.min_profit_filter.setPrefix("Div ")
         self.min_profit_filter.valueChanged.connect(self.apply_filters)
-        self._delayed_tip(self.min_profit_filter, "Показывать только связки с чистым профитом выше указанного.")
+        self._delayed_tip(self.min_profit_filter, "Показывать только связки с чистым профитом в Divine выше указанного.")
 
         self.min_profit_hour_filter = QDoubleSpinBox()
         self.min_profit_hour_filter.setRange(0, 1_000_000)
-        self.min_profit_hour_filter.setDecimals(0)
-        self.min_profit_hour_filter.setPrefix("Профит/ч ")
+        self.min_profit_hour_filter.setDecimals(2)
+        self.min_profit_hour_filter.setPrefix("Div/ч ")
         self.min_profit_hour_filter.valueChanged.connect(self.apply_filters)
-        self._delayed_tip(self.min_profit_hour_filter, "Показывать только связки с расчетным профитом в час выше указанного.")
+        self._delayed_tip(self.min_profit_hour_filter, "Показывать только связки с расчетным профитом в Divine за час выше указанного.")
 
         self.max_age_filter = QDoubleSpinBox()
         self.max_age_filter.setRange(0, 10_000)
@@ -842,27 +843,25 @@ class OverlayWindow(QMainWindow):
         opportunities_layout.setContentsMargins(0, 0, 0, 0)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels(
             [
-                "Иконки",
-                "Маршрут",
+                "Связка",
                 "Вход",
                 "Выход",
-                "Профит",
+                "Профит Div",
                 "Доходность",
-                "Профит/ч",
+                "Div/ч",
                 "Риск",
             ]
         )
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.setIconSize(QSize(220, 40))
+        self.table.setIconSize(QSize(220, 42))
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setAlternatingRowColors(True)
@@ -971,8 +970,10 @@ class OverlayWindow(QMainWindow):
             return "История пока пустая. Запусти расчет или сканирование, чтобы появились записи."
         lines = []
         for row in rows:
+            value_currency = row.get("value_currency") or "Divine Orb"
+            net_profit_value = float(row.get("net_profit_value") or row["net_profit"])
             lines.append(
-                f"{row['created_at']} | {row['path']} | профит {row['net_profit']:.2f} | доходность {row['roi_percent']:.2f}%"
+                f"{row['created_at']} | {row['path']} | профит {net_profit_value:.4f} {self._alias(value_currency)} | доходность {row['roi_percent']:.2f}%"
             )
         return "\n".join(lines)
 
@@ -1059,9 +1060,9 @@ class OverlayWindow(QMainWindow):
                 continue
             if opportunity.roi_percent < min_roi:
                 continue
-            if opportunity.net_profit < min_profit:
+            if opportunity.net_profit_value < min_profit:
                 continue
-            if opportunity.profit_per_hour < min_profit_hour:
+            if opportunity.profit_per_hour_value < min_profit_hour:
                 continue
             if max_age and opportunity.age_seconds > max_age:
                 continue
@@ -1073,7 +1074,10 @@ class OverlayWindow(QMainWindow):
         visible = self._sort_opportunities(visible)
         self.filtered_opportunities = visible
         self._render_rows(visible)
-        self.status_label.setText(f"Показано связок: {len(visible)} из {len(self.opportunities)}")
+        if self.opportunities:
+            self.status_label.setText(f"Показано связок: {len(visible)} из {len(self.opportunities)}")
+        else:
+            self.status_label.setText("Связок пока нет. Открой NPC Currency Exchange и нажми `Скан пары`.")
 
     def _render_rows(self, opportunities: list[Opportunity]) -> None:
         self.table.setRowCount(len(opportunities))
@@ -1081,13 +1085,12 @@ class OverlayWindow(QMainWindow):
         self.table.setVisible(bool(opportunities))
         for row, opportunity in enumerate(opportunities):
             values = [
-                "",
-                self._path_label(opportunity),
+                self._route_summary(opportunity),
                 f"{opportunity.input_amount:.2f} {self._alias(opportunity.input_currency)}",
                 f"{opportunity.output_amount:.2f} {self._alias(opportunity.input_currency)}",
-                f"{opportunity.net_profit:.2f}",
+                self._value_label(opportunity.net_profit_value, opportunity.value_currency),
                 f"{opportunity.roi_percent:.2f}%",
-                f"{opportunity.profit_per_hour:.2f}",
+                self._value_label(opportunity.profit_per_hour_value, opportunity.value_currency),
                 RISK_LABELS.get(opportunity.risk, opportunity.risk),
             ]
             for column, value in enumerate(values):
@@ -1095,9 +1098,9 @@ class OverlayWindow(QMainWindow):
                 item.setData(Qt.ItemDataRole.UserRole, self._opportunity_tooltip(opportunity))
                 if column == 0:
                     item.setIcon(self._route_icon(opportunity))
-                if column in {4, 5} and opportunity.net_profit > 0:
+                if column in {3, 4} and opportunity.net_profit_value > 0:
                     item.setForeground(QColor("#4bd16f"))
-                if column == 7 and opportunity.risk == "high":
+                if column == 6 and opportunity.risk == "high":
                     item.setForeground(QColor("#ff6b6b"))
                 self.table.setItem(row, column, item)
             base_height = 32 if self.compact_mode else 48
@@ -1123,9 +1126,9 @@ class OverlayWindow(QMainWindow):
             return opportunities
         sort = self.sort_filter.currentText()
         keys = {
-            "Профит": lambda item: item.net_profit,
+            "Профит": lambda item: item.net_profit_value,
             "Доходность": lambda item: item.roi_percent,
-            "Профит/ч": lambda item: item.profit_per_hour,
+            "Профит/ч": lambda item: item.profit_per_hour_value,
             "Уверенность": lambda item: item.confidence,
         }
         return sorted(opportunities, key=keys.get(sort, keys["Профит"]), reverse=True)
@@ -1143,7 +1146,7 @@ class OverlayWindow(QMainWindow):
         self.status_label.setText("Фильтры показаны." if self.filters_expanded else "Фильтры скрыты.")
 
     def _apply_compact_layout(self) -> None:
-        compact_hidden_columns = {2, 3, 6}
+        compact_hidden_columns = {1, 2, 5}
         for column in range(self.table.columnCount()):
             self.table.setColumnHidden(column, self.compact_mode and column in compact_hidden_columns)
         self.table.horizontalHeader().setVisible(not self.compact_mode)
@@ -1370,7 +1373,8 @@ class OverlayWindow(QMainWindow):
         self.status_label.setText("Обновляю кандидатов через poe.ninja.")
         QApplication.processEvents()
         try:
-            candidates = fetch_currency_candidates(league=self.settings.league, limit=25)
+            all_candidates = fetch_all_currency_candidates(league=self.settings.league)
+            candidates = shortlist_candidates(all_candidates, limit=25)
         except Exception as error:
             self.show_error(f"Не удалось обновить кандидатов: {error}")
             self.status_label.setText("Кандидаты не обновлены. Проверь сеть, league и доступность poe.ninja.")
@@ -1383,29 +1387,40 @@ class OverlayWindow(QMainWindow):
 
         self.candidate_trends = {
             candidate.name: candidate.seven_day_change_percent
-            for candidate in candidates
+            for candidate in all_candidates
         }
+        valuation_edges = build_valuation_edges(all_candidates)
+        candidate_values = value_amounts(all_candidates)
+        if valuation_edges:
+            self.live_rates = merge_valuation_edges(self.live_rates, valuation_edges)
+            self._recalculate_opportunities()
+        cached_icons = 0
         try:
-            cached_icons = self.icon_cache.cache_candidates(candidates)
-        except RuntimeError:
-            cached_icons = 0
+            cached_icons += self.icon_cache.cache_candidates(candidates)
         except Exception:
-            cached_icons = 0
+            pass
+        try:
+            cached_icons += self.icon_cache.cache_static_icons(["Exalted Orb", "Divine Orb", "Chaos Orb", "Omen of Whittling"])
+        except Exception:
+            pass
         lines = [
             "Кандидаты для проверки в NPC Currency Exchange",
             "",
-            "Сначала проверяй верхние строки: у них выше сочетание объема, цены в Chaos и тренда.",
+            "Сначала проверяй верхние строки: у них выше сочетание объема, цены в Divine и тренда.",
             "",
         ]
         for index, candidate in enumerate(candidates, start=1):
+            value = candidate_values.get(candidate.name)
+            value_label = "Divine baseline недоступен" if value is None else f"Divine {value:.4f}"
             lines.append(
-                f"{index}. {candidate.name} | Chaos {candidate.value_in_chaos:.2f} | "
+                f"{index}. {candidate.name} | {value_label} | "
                 f"объем/ч {candidate.volume_per_hour:.0f} | 7д {candidate.seven_day_change_percent:.1f}% | "
                 f"оценка {candidate.volume_score:.0f}"
             )
         self.candidates_view.setPlainText("\n".join(lines))
         self.tabs.setCurrentWidget(self.candidates_view)
-        self.status_label.setText(f"Кандидаты обновлены: {len(candidates)} позиций, новых иконок: {cached_icons}.")
+        valuation_status = f", valuation edges: {len(valuation_edges)}" if valuation_edges else ", без Divine baseline"
+        self.status_label.setText(f"Кандидаты обновлены: {len(candidates)} позиций, новых иконок: {cached_icons}{valuation_status}.")
 
     def export_opportunities(self) -> None:
         rows = self.filtered_opportunities or self.opportunities
@@ -1559,6 +1574,14 @@ class OverlayWindow(QMainWindow):
     def _path_label(self, opportunity: Opportunity) -> str:
         return " -> ".join(self._alias(part) for part in opportunity.path)
 
+    def _route_summary(self, opportunity: Opportunity) -> str:
+        if len(opportunity.path) <= 2:
+            return self._path_label(opportunity)
+        start = self._alias(opportunity.path[0])
+        end = self._alias(opportunity.path[-1])
+        middle_count = max(0, len(opportunity.path) - 2)
+        return f"{start} -> {middle_count} step{'s' if middle_count != 1 else ''} -> {end}"
+
     def _path_icons(self, opportunity: Opportunity) -> str:
         icons = []
         for part in opportunity.path:
@@ -1599,19 +1622,10 @@ class OverlayWindow(QMainWindow):
     def _icon_for_currency(self, name: str) -> QIcon:
         cached = self.icon_cache.cached_icon_path(name)
         if cached:
-            return QIcon(str(cached))
-        if name not in self.missing_icon_downloads:
-            try:
-                self.icon_cache.cache_static_icons([name])
-            except RuntimeError:
-                self.missing_icon_downloads.add(name)
-            except Exception:
-                self.missing_icon_downloads.add(name)
-            else:
-                cached = self.icon_cache.cached_icon_path(name)
-                if cached:
-                    return QIcon(str(cached))
-                self.missing_icon_downloads.add(name)
+            icon = QIcon(str(cached))
+            if not icon.isNull():
+                return icon
+            cached.unlink(missing_ok=True)
         color, text = ICON_COLORS.get(name, ("#6f7b88", "IT"))
         pixmap = QPixmap(40, 40)
         pixmap.fill(Qt.GlobalColor.transparent)
@@ -1633,11 +1647,21 @@ class OverlayWindow(QMainWindow):
     def _alias(name: str) -> str:
         return ALIASES.get(name, name)
 
+    def _value_label(self, amount: float, currency: str) -> str:
+        if amount <= 0:
+            return "нет курса"
+        return f"{amount:.4f} {self._alias(currency)}"
+
     def _opportunity_tooltip(self, opportunity: Opportunity) -> str:
         risk_reasons = "; ".join(opportunity.risk_reasons) if opportunity.risk_reasons else "нет данных"
         strategy_descriptions = "; ".join(
             STRATEGY_TYPE_DESCRIPTIONS.get(strategy, strategy.value)
             for strategy in opportunity.strategy_types
+        )
+        mirror_line = (
+            f"Эквивалент Mirror: {opportunity.mirror_value:.8f} Mirror\n"
+            if opportunity.mirror_value is not None
+            else ""
         )
         return (
             f"Связка: {self._path_label(opportunity)}\n"
@@ -1645,7 +1669,9 @@ class OverlayWindow(QMainWindow):
             f"Стратегия: {opportunity.strategy_label}\n"
             f"Вход: {opportunity.input_amount:.2f} {self._alias(opportunity.input_currency)}\n"
             f"Выход: {opportunity.output_amount:.2f} {self._alias(opportunity.input_currency)}\n"
-            f"Чистый профит: {opportunity.net_profit:.2f}\n"
+            f"Чистый профит цикла: {opportunity.net_profit:.2f} {self._alias(opportunity.input_currency)}\n"
+            f"Итоговый профит: {self._value_label(opportunity.net_profit_value, opportunity.value_currency)}\n"
+            f"{mirror_line}"
             f"Доходность: {opportunity.roi_percent:.2f}%\n"
             f"Уверенность данных: {opportunity.confidence:.2f}\n"
             f"Возраст данных: {self._age_label(opportunity.age_seconds)}\n"
@@ -1658,7 +1684,8 @@ class OverlayWindow(QMainWindow):
             f"Причины риска: {risk_reasons}\n"
             f"Источник курсов: {opportunity.source}\n\n"
             "Доходность показывает прибыль одного полного цикла в процентах. "
-            "Профит/ч зависит от скорости исполнения и будет точнее после сканирования игры."
+            "Итоговый профит считается в Divine, потому что это основная торговая валюта. "
+            "Mirror используется как долгосрочный store-of-value reference, когда доступен курс."
         )
 
     @staticmethod
@@ -1711,10 +1738,16 @@ class OverlayWindow(QMainWindow):
                 "Итог:",
                 f"Вход: {opportunity.input_amount:.4f} {self._alias(opportunity.input_currency)}",
                 f"Выход: {opportunity.output_amount:.4f} {self._alias(opportunity.input_currency)}",
-                f"Валовый профит: {opportunity.gross_profit:.4f}",
-                f"Чистый профит: {opportunity.net_profit:.4f}",
+                f"Валовый профит цикла: {opportunity.gross_profit:.4f} {self._alias(opportunity.input_currency)}",
+                f"Чистый профит цикла: {opportunity.net_profit:.4f} {self._alias(opportunity.input_currency)}",
+                f"Итоговый профит: {self._value_label(opportunity.net_profit_value, opportunity.value_currency)}",
+                f"Профит/ч: {self._value_label(opportunity.profit_per_hour_value, opportunity.value_currency)}",
+                (
+                    f"Mirror reference: {opportunity.mirror_value:.8f} Mirror"
+                    if opportunity.mirror_value is not None
+                    else "Mirror reference: нет курса"
+                ),
                 f"Доходность: {opportunity.roi_percent:.2f}%",
-                f"Профит/ч: {opportunity.profit_per_hour:.4f}",
                 f"Тренд: {opportunity.trend_percent:.1f}%",
                 f"Время исполнения: {opportunity.execution_time_seconds:.1f} сек",
                 "",

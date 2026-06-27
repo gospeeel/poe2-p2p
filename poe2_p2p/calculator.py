@@ -9,7 +9,9 @@ from .economic_strategies import classify_strategies
 from .models import ChainType, Opportunity, OpportunityStep, RateEdge
 
 
-CORE_CURRENCIES = {"Exalted Orb", "Divine Orb", "Chaos Orb"}
+DIVINE_ORB = "Divine Orb"
+MIRROR_OF_KALANDRA = "Mirror of Kalandra"
+CORE_CURRENCIES = {"Exalted Orb", DIVINE_ORB, "Chaos Orb"}
 
 
 class ArbitrageCalculator:
@@ -31,6 +33,8 @@ class ArbitrageCalculator:
         cycles_per_hour: float = 1.0,
         min_roi_percent: float = 0.0,
         min_net_profit: float = 0.0,
+        value_currency: str = DIVINE_ORB,
+        store_of_value_currency: str = MIRROR_OF_KALANDRA,
     ) -> None:
         self.rates = rates
         self.slippage_buffer_percent = slippage_buffer_percent
@@ -48,6 +52,8 @@ class ArbitrageCalculator:
         self.cycles_per_hour = cycles_per_hour
         self.min_roi_percent = min_roi_percent
         self.min_net_profit = min_net_profit
+        self.value_currency = value_currency
+        self.store_of_value_currency = store_of_value_currency
         self.graph: dict[str, list[RateEdge]] = defaultdict(list)
         for rate in rates:
             if rate.rate <= 0:
@@ -73,7 +79,7 @@ class ArbitrageCalculator:
             edges=(),
             opportunities=opportunities,
         )
-        return sorted(opportunities, key=lambda item: item.net_profit, reverse=True)
+        return sorted(opportunities, key=lambda item: item.net_profit_value, reverse=True)
 
     def _walk(
         self,
@@ -104,7 +110,7 @@ class ArbitrageCalculator:
                 )
                 if (
                     opportunity.roi_percent >= self.min_roi_percent
-                    and opportunity.net_profit >= self.min_net_profit
+                    and opportunity.net_profit_value >= self.min_net_profit
                 ):
                     opportunities.append(opportunity)
                 continue
@@ -160,6 +166,13 @@ class ArbitrageCalculator:
             if execution_time_seconds > 0
             else net_profit * self.cycles_per_hour
         )
+        value_rate = self._conversion_rate(input_currency, self.value_currency)
+        input_value = input_amount * value_rate
+        output_value = output_amount * value_rate
+        net_profit_value = net_profit * value_rate
+        profit_per_hour_value = profit_per_hour * value_rate
+        mirror_rate = self._conversion_rate(self.value_currency, self.store_of_value_currency)
+        mirror_value = net_profit_value * mirror_rate if mirror_rate > 0 else None
         trend_values = [
             self.trend_by_currency[node]
             for node in path[:-1]
@@ -167,7 +180,7 @@ class ArbitrageCalculator:
         ]
         trend_percent = sum(trend_values) / len(trend_values) if trend_values else 0.0
         trend_factor = 1 + max(trend_percent, 0.0) / 100
-        score = profit_per_hour * confidence * trend_factor
+        score = profit_per_hour_value * confidence * trend_factor
         source = ", ".join(edge.source for edge in edges)
         stocks = [edge.observed_stock for edge in edges if edge.observed_stock is not None]
         max_size = min(stocks) if stocks else None
@@ -215,8 +228,33 @@ class ArbitrageCalculator:
             steps=steps,
             risk_reasons=risk_reasons,
             trend_percent=trend_percent,
+            value_currency=self.value_currency,
+            input_value=input_value,
+            output_value=output_value,
+            net_profit_value=net_profit_value,
+            profit_per_hour_value=profit_per_hour_value,
+            mirror_value=mirror_value,
         )
         return replace(opportunity, strategy_types=classify_strategies(opportunity))
+
+    def _conversion_rate(self, from_currency: str, to_currency: str) -> float:
+        if from_currency == to_currency:
+            return 1.0
+        direct = self._direct_conversion_rate(from_currency, to_currency)
+        if direct is not None:
+            return direct
+        # Two-hop conversion is enough for current hub currencies and keeps valuation predictable.
+        for first in self.graph.get(from_currency, []):
+            second = self._direct_conversion_rate(first.to_currency, to_currency)
+            if second is not None:
+                return first.rate * second
+        return 0.0
+
+    def _direct_conversion_rate(self, from_currency: str, to_currency: str) -> float | None:
+        for edge in self.graph.get(from_currency, []):
+            if edge.to_currency == to_currency:
+                return edge.rate
+        return None
 
     def _build_steps(
         self,

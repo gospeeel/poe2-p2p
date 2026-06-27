@@ -19,6 +19,18 @@ def fetch_currency_candidates(
     limit: int = 25,
     min_volume_per_hour: float = 0.0,
 ) -> list[Candidate]:
+    candidates = fetch_all_currency_candidates(url=url, league=league)
+    return shortlist_candidates(
+        candidates,
+        limit=limit,
+        min_volume_per_hour=min_volume_per_hour,
+    )
+
+
+def fetch_all_currency_candidates(
+    url: str | None = DEFAULT_POE_NINJA_POE2_CURRENCY_URL,
+    league: str | None = None,
+) -> list[Candidate]:
     try:
         import requests
     except ImportError as error:
@@ -37,9 +49,4 @@ def fetch_currency_candidates(
     except ValueError as error:
         content_type = response.headers.get("content-type", "unknown")
         raise RuntimeError(f"poe.ninja returned non-JSON response: {content_type}") from error
-    candidates = parse_poe_ninja_currency_rows(payload)
-    return shortlist_candidates(
-        candidates,
-        limit=limit,
-        min_volume_per_hour=min_volume_per_hour,
-    )
+    return parse_poe_ninja_currency_rows(payload)

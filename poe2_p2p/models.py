@@ -130,6 +130,12 @@ class Opportunity:
     strategy_types: tuple[StrategyType, ...] = (StrategyType.GENERIC,)
     trend_percent: float = 0.0
     baseline_delta_percent: float = 0.0
+    value_currency: str = "Divine Orb"
+    input_value: float = 0.0
+    output_value: float = 0.0
+    net_profit_value: float = 0.0
+    profit_per_hour_value: float = 0.0
+    mirror_value: float | None = None
 
     @property
     def path_label(self) -> str:

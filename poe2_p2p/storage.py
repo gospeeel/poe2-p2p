@@ -62,6 +62,12 @@ class SQLiteStore:
                     trend_percent REAL DEFAULT 0 NOT NULL,
                     execution_steps INTEGER DEFAULT 0 NOT NULL,
                     execution_time_seconds REAL DEFAULT 0 NOT NULL,
+                    value_currency TEXT DEFAULT 'Divine Orb' NOT NULL,
+                    input_value REAL DEFAULT 0 NOT NULL,
+                    output_value REAL DEFAULT 0 NOT NULL,
+                    net_profit_value REAL DEFAULT 0 NOT NULL,
+                    profit_per_hour_value REAL DEFAULT 0 NOT NULL,
+                    mirror_value REAL,
                     source TEXT NOT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 );
@@ -87,6 +93,12 @@ class SQLiteStore:
             "trend_percent": "ALTER TABLE opportunities ADD COLUMN trend_percent REAL DEFAULT 0 NOT NULL",
             "execution_steps": "ALTER TABLE opportunities ADD COLUMN execution_steps INTEGER DEFAULT 0 NOT NULL",
             "execution_time_seconds": "ALTER TABLE opportunities ADD COLUMN execution_time_seconds REAL DEFAULT 0 NOT NULL",
+            "value_currency": "ALTER TABLE opportunities ADD COLUMN value_currency TEXT DEFAULT 'Divine Orb' NOT NULL",
+            "input_value": "ALTER TABLE opportunities ADD COLUMN input_value REAL DEFAULT 0 NOT NULL",
+            "output_value": "ALTER TABLE opportunities ADD COLUMN output_value REAL DEFAULT 0 NOT NULL",
+            "net_profit_value": "ALTER TABLE opportunities ADD COLUMN net_profit_value REAL DEFAULT 0 NOT NULL",
+            "profit_per_hour_value": "ALTER TABLE opportunities ADD COLUMN profit_per_hour_value REAL DEFAULT 0 NOT NULL",
+            "mirror_value": "ALTER TABLE opportunities ADD COLUMN mirror_value REAL",
         }
         for column, statement in migrations.items():
             if column not in existing:
@@ -144,8 +156,14 @@ class SQLiteStore:
                     trend_percent,
                     execution_steps,
                     execution_time_seconds,
+                    value_currency,
+                    input_value,
+                    output_value,
+                    net_profit_value,
+                    profit_per_hour_value,
+                    mirror_value,
                     source
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -168,6 +186,12 @@ class SQLiteStore:
                         opportunity.trend_percent,
                         opportunity.execution_steps,
                         opportunity.execution_time_seconds,
+                        opportunity.value_currency,
+                        opportunity.input_value,
+                        opportunity.output_value,
+                        opportunity.net_profit_value,
+                        opportunity.profit_per_hour_value,
+                        opportunity.mirror_value,
                         opportunity.source,
                     )
                     for opportunity in opportunities
@@ -198,6 +222,12 @@ class SQLiteStore:
                     trend_percent,
                     execution_steps,
                     execution_time_seconds,
+                    value_currency,
+                    input_value,
+                    output_value,
+                    net_profit_value,
+                    profit_per_hour_value,
+                    mirror_value,
                     created_at
                 FROM opportunities
                 ORDER BY id DESC
@@ -211,5 +241,12 @@ class SQLiteStore:
         with self.connection() as connection:
             value = connection.execute(
                 "SELECT COALESCE(SUM(net_profit), 0) FROM opportunities"
+            ).fetchone()[0]
+        return float(value)
+
+    def total_recorded_net_profit_value(self) -> float:
+        with self.connection() as connection:
+            value = connection.execute(
+                "SELECT COALESCE(SUM(net_profit_value), 0) FROM opportunities"
             ).fetchone()[0]
         return float(value)

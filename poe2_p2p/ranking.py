@@ -8,9 +8,13 @@ def rank_opportunities(
     key: str = "net_profit",
 ) -> list[Opportunity]:
     keys = {
-        "net_profit": lambda item: item.net_profit,
+        "net_profit": lambda item: item.net_profit_value,
+        "net_profit_value": lambda item: item.net_profit_value,
+        "cycle_net_profit": lambda item: item.net_profit,
         "roi": lambda item: item.roi_percent,
-        "profit_per_hour": lambda item: item.profit_per_hour,
+        "profit_per_hour": lambda item: item.profit_per_hour_value,
+        "profit_per_hour_value": lambda item: item.profit_per_hour_value,
+        "cycle_profit_per_hour": lambda item: item.profit_per_hour,
         "score": lambda item: item.score,
         "confidence": lambda item: item.confidence,
     }

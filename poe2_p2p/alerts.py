@@ -11,6 +11,6 @@ def filter_profit_alerts(
     return [
         opportunity
         for opportunity in opportunities
-        if opportunity.net_profit >= min_net_profit
+        if opportunity.net_profit_value >= min_net_profit
         and opportunity.roi_percent >= min_roi_percent
     ]

@@ -13,13 +13,15 @@ from .exporter import export_opportunities_csv
 from .icon_cache import cache_poe_ninja_icons
 from .logging_utils import configure_logging
 from .parser import parse_ratio
-from .poe_ninja import fetch_currency_candidates
+from .candidates import shortlist_candidates
+from .poe_ninja import fetch_all_currency_candidates
 from .presets import DEFAULT_PRESETS, get_preset
 from .ranking import rank_opportunities
 from .sample_data import EXALTED, screenshot_rates
 from .storage import SQLiteStore
 from .updater import check_for_updates
 from .validation import validate_ratio_range
+from .valuation import value_amounts
 
 
 def build_sample_opportunities(
@@ -66,15 +68,15 @@ def build_sample_opportunities(
 def print_cli_table(opportunities=None) -> None:
     if opportunities is None:
         _, opportunities = build_sample_opportunities()
-    headers = ("Path", "Input", "Output", "Net Profit", "ROI %", "Profit/h", "Risk", "Confidence")
+    headers = ("Path", "Input", "Output", "Net Profit Divine", "ROI %", "Divine/h", "Risk", "Confidence")
     rows = [
         (
             opportunity.path_label,
             f"{opportunity.input_amount:.2f} {opportunity.input_currency}",
             f"{opportunity.output_amount:.2f} {opportunity.input_currency}",
-            f"{opportunity.net_profit:.2f}",
+            f"{opportunity.net_profit_value:.4f}",
             f"{opportunity.roi_percent:.2f}",
-            f"{opportunity.profit_per_hour:.2f}",
+            f"{opportunity.profit_per_hour_value:.4f}",
             opportunity.risk,
             f"{opportunity.confidence:.2f}",
         )
@@ -182,15 +184,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.fetch_candidates:
-        candidates = fetch_currency_candidates(
+        all_candidates = fetch_all_currency_candidates(
             url=args.poe_ninja_url or None,
             league=args.poe_ninja_league,
+        )
+        candidates = shortlist_candidates(
+            all_candidates,
             limit=args.candidate_limit,
             min_volume_per_hour=args.min_volume,
         )
+        candidate_values = value_amounts(all_candidates)
         for candidate in candidates:
+            value = candidate_values.get(candidate.name)
+            value_label = "нет Divine baseline" if value is None else f"divine={value:g}"
             print(
-                f"{candidate.name} | chaos={candidate.value_in_chaos:g} | "
+                f"{candidate.name} | {value_label} | "
                 f"volume/h={candidate.volume_per_hour:g} | "
                 f"7d={candidate.seven_day_change_percent:g}% | "
                 f"score={candidate.volume_score:g}"
@@ -276,6 +284,35 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Confidence: {result.confidence:.2f}")
         return 0
 
+    store = SQLiteStore(Path(args.db))
+    store.init_schema()
+
+    if args.history is not None:
+        for row in store.list_recent_opportunities(args.history):
+            print(
+                f"{row['created_at']} | {row['path']} | "
+                f"net={row['net_profit_value']:.4f} {row['value_currency']} | roi={row['roi_percent']:.2f}% | "
+                f"score={row['score']:.2f} | risk={row['risk']}"
+            )
+        print(f"Total recorded net profit: {store.total_recorded_net_profit_value():.4f} Divine Orb")
+        return 0
+
+    if args.history_dashboard:
+        rows = store.list_recent_opportunities(200)
+        export_history_dashboard(rows, args.history_dashboard)
+        print(f"Exported history dashboard -> {args.history_dashboard}")
+        return 0
+
+    needs_sample_data = args.cli or args.export_csv or args.alert_profit is not None
+    if not needs_sample_data:
+        try:
+            from .ui.overlay import run_overlay
+        except ImportError as error:
+            print(f"PySide6 overlay is unavailable: {error}")
+            print("Run with --cli or install requirements.txt")
+            return 1
+        return run_overlay([])
+
     preset = get_preset(args.preset)
     max_hops = args.max_hops if args.max_hops is not None else preset.max_hops
     rates, opportunities = build_sample_opportunities(
@@ -297,26 +334,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     opportunities = rank_opportunities(opportunities, key=args.rank_by)
 
-    store = SQLiteStore(Path(args.db))
-    store.init_schema()
     store.save_rates(rates)
     store.save_opportunities(opportunities)
-
-    if args.history is not None:
-        for row in store.list_recent_opportunities(args.history):
-            print(
-                f"{row['created_at']} | {row['path']} | "
-                f"net={row['net_profit']:.2f} | roi={row['roi_percent']:.2f}% | "
-                f"score={row['score']:.2f} | risk={row['risk']}"
-            )
-        print(f"Total recorded net profit: {store.total_recorded_net_profit():.2f}")
-        return 0
-
-    if args.history_dashboard:
-        rows = store.list_recent_opportunities(200)
-        export_history_dashboard(rows, args.history_dashboard)
-        print(f"Exported history dashboard -> {args.history_dashboard}")
-        return 0
 
     if args.export_csv:
         export_opportunities_csv(opportunities, args.export_csv)
@@ -335,16 +354,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cli:
         print_cli_table(opportunities)
         return 0
-
-    try:
-        from .ui.overlay import run_overlay
-    except ImportError as error:
-        print(f"PySide6 overlay is unavailable: {error}")
-        print("Run with --cli or install requirements.txt")
-        print_cli_table()
-        return 1
-
-    return run_overlay(opportunities)
+    return 0
 
 
 if __name__ == "__main__":

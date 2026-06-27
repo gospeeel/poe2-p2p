@@ -144,6 +144,8 @@ dist/POE2-P2P/POE2-P2P.exe
 - [x] При live preview/OCR временно прятать overlay, чтобы не захватывать интерфейс приложения вместо игры.
 - [x] Сократить таблицу в основном режиме до: маршрут, вход, выход, net profit, ROI, profit/hour, risk.
 - [x] Убрать `confidence`, `age`, `type`, `strategy`, `volume`, `steps` из основного вида в tooltip/`Разбор`.
+- [x] Убрать стартовую dev-связку из обычного GUI-запуска; пользователь видит пустое состояние до своего scan.
+- [x] Объединить иконки и маршрут в одну колонку `Связка`, чтобы не дублировать один и тот же route.
 - [ ] Сверстать production top bar: крупный profit signal, last scan status, 2-3 primary actions, остальное в menus.
 - [ ] Сделать отдельный `Advanced` режим для research-фильтров и полного набора колонок.
 - [ ] Проверить читаемость на 1080p/1440p/4K и в окне поверх POE2.
@@ -210,7 +212,9 @@ dist/POE2-P2P/POE2-P2P.exe
 
 - [x] Настоящие иконки валют в каждом узле маршрута из локального кеша poe.ninja/API, fallback для неизвестных items.
 - [x] Автокеш реальных иконок ключевых валют: Exalted, Divine, Chaos, Omen of Whittling.
+- [x] Fallback загрузки иконок по имени через poe.ninja/API, если статичный CDN URL не сработал.
 - [x] Увеличить область route icons в таблице для читаемости.
+- [x] Не выполнять сетевую загрузку иконок во время рендера таблицы; сеть только по явному `Кандидаты`.
 - [ ] Расширить автокеш реальных иконок на Regal, Alchemy, Vaal, основные Omens/Runes/Essences.
 - [ ] Проверить источник и лицензирование ассетов перед упаковкой в installer; poe.ninja/API cache предпочтительнее ручного копирования с сайтов.
 - [x] Компактная строка маршрута с иконками `Exalted -> Omen -> Divine -> Exalted` и раскрытием полного названия по tooltip.
@@ -278,14 +282,23 @@ data_confidence >= порог надежности
 - актуальность ratio;
 - повторяемость сделки.
 
+Итоговая единица оценки:
+
+- `Divine Orb` - основная валюта итогового profit, ranking, фильтров и profit/hour.
+- `Exalted Orb` - валюта исполнения отдельных циклов, но не основная единица оценки из-за инфляционного риска.
+- `Mirror of Kalandra` - долгосрочный store-of-value reference; показывать эквивалент, когда есть курс к Divine.
+
 ### Формула score
 
 ```text
-gross_profit = output_value_base - input_value_base
+value_currency = Divine Orb
+store_of_value_reference = Mirror of Kalandra
+
+gross_profit = output_value_divine - input_value_divine
 net_profit = gross_profit - spread_loss - rounding_loss - gold_cost - slippage_buffer
 
 roi_percent = net_profit / input_value_base * 100
-profit_per_hour = net_profit_per_cycle * cycles_per_hour
+profit_per_hour = net_profit_divine_per_cycle * cycles_per_hour
 
 score =
   profit_per_hour
@@ -364,6 +377,8 @@ score =
 - [x] Kill-switch: скрывать цепочки с отрицательным net после всех потерь.
 - [x] Minimum bankroll filter: сколько валюты нужно для осмысленного цикла.
 - [x] Risk labels: low/medium/high с понятной причиной.
+- [x] Итоговый profit/ranking/filter в Divine Orb как основной торговой валюте.
+- [x] Mirror of Kalandra как store-of-value reference при наличии курса.
 
 ### Следующий экономический milestone
 

@@ -44,6 +44,23 @@ class IconCache:
             urls = {name: url for name, url in STATIC_ICON_URLS.items() if name in requested}
         return self.cache_icon_urls(urls)
 
+    def cache_poe_ninja_icons_for_names(
+        self,
+        names: list[str] | tuple[str, ...] | set[str],
+        league: str | None = None,
+        limit: int = 200,
+    ) -> int:
+        requested = set(names)
+        if not requested:
+            return 0
+        candidates = fetch_currency_candidates(league=league, limit=limit)
+        matches = [
+            candidate
+            for candidate in candidates
+            if candidate.name in requested and candidate.image_url
+        ]
+        return self.cache_candidates(matches)
+
     def cache_icon_urls(self, icon_urls: dict[str, str | None]) -> int:
         try:
             import requests
